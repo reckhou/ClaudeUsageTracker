@@ -51,8 +51,8 @@
         <Frame CornerRadius="10" Padding="20"
                BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
           <VerticalStackLayout Spacing="12">
-            <Label Text="Claude Pro Plan" FontSize="16" FontAttributes="Bold" />
-            <Label Text="Shows current session and weekly quota usage for your Claude.ai account."
+            <Label Text="Claude Plan" FontSize="16" FontAttributes="Bold" />
+            <Label Text="Shows current session and weekly quota usage for your Claude account."
                    FontSize="12" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
             <Label Text="{Binding ClaudeProStatus}" FontSize="13" />
             <Button x:Name="ConnectClaudeProButton" Text="Connect Claude Pro"

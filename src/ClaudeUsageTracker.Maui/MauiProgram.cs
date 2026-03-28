@@ -33,6 +33,7 @@ public static class MauiProgram
 		});
 		builder.Services.AddSingleton<IClaudeAiUsageService, ClaudeAiUsageService>();
 		builder.Services.AddSingleton<IUsageProvider, MiniMaxiUsageProvider>();
+		builder.Services.AddSingleton<IUsageProvider>(sp => new ClaudeProUsageProvider(sp.GetRequiredService<IClaudeAiUsageService>()));
 		builder.Services.AddTransient<SetupViewModel>();
 		builder.Services.AddTransient<DashboardViewModel>(sp => new DashboardViewModel(
 			sp.GetRequiredService<ISecureStorageService>(),
