@@ -6,9 +6,13 @@ public class ClaudeProWebViewPage : ContentPage
 {
     private readonly WebView _webView;
     private readonly Label _statusLabel;
+    private readonly Label _errorLabel;
+    private readonly Button _retryBtn;
+    private readonly Button _copyErrorBtn;
+    private string? _lastError;
     private readonly TaskCompletionSource<QuotaRecord?> _tcs = new();
     private readonly bool _silent;
-    private bool _extracted;
+    private string? _extractedUrl;
 
     public ClaudeProWebViewPage(bool silent = false)
     {
@@ -23,6 +27,54 @@ public class ClaudeProWebViewPage : ContentPage
             FontSize = 12
         };
 
+        _retryBtn = new Button
+        {
+            Text = "I\u2019ve logged in \u2014 Retry",
+            FontSize = 13,
+            Padding = new Thickness(16, 8),
+            MinimumWidthRequest = 160
+        };
+        _retryBtn.Clicked += async (_, _) =>
+        {
+            _statusLabel.Text = "Reloading\u2026";
+            _errorLabel.IsVisible = false;
+            // Clear extracted URL so OnNavigated will process after login
+            _extractedUrl = null;
+            // Force a hard reload to ensure fresh auth state, not cached content
+            _webView.Source = new UrlWebViewSource { Url = "https://claude.ai/settings/usage" };
+        };
+
+        _errorLabel = new Label
+        {
+            Text = "",
+            IsVisible = false,
+            FontSize = 11,
+            TextColor = Colors.OrangeRed,
+            Padding = new Thickness(16, 4, 16, 0)
+        };
+
+        _copyErrorBtn = new Button
+        {
+            Text = "Copy Error",
+            IsVisible = false,
+            FontSize = 13,
+            BackgroundColor = new Color(60, 60, 60),
+            TextColor = Colors.White,
+            Padding = new Thickness(16, 8),
+            MinimumWidthRequest = 100
+        };
+        _copyErrorBtn.Clicked += async (_, _) =>
+        {
+            if (!string.IsNullOrEmpty(_lastError))
+            {
+                await Clipboard.Default.SetTextAsync(_lastError);
+                var original = _copyErrorBtn.Text;
+                _copyErrorBtn.Text = "Copied!";
+                await Task.Delay(2000);
+                _copyErrorBtn.Text = original;
+            }
+        };
+
         if (silent)
         {
             Content = new Grid { IsVisible = false, Children = { _webView, _statusLabel } };
@@ -30,25 +82,43 @@ public class ClaudeProWebViewPage : ContentPage
         else
         {
             Title = "Connect Claude Pro";
-            var closeBtn = new Button { Text = "Cancel", HorizontalOptions = LayoutOptions.End };
+
+            var closeBtn = new Button { Text = "Cancel" };
             closeBtn.Clicked += (_, _) => _tcs.TrySetResult(null);
 
-            var grid = new Grid
+            // Always-visible horizontal button row
+            var buttonRow = new HorizontalStackLayout
+            {
+                Spacing = 12,
+                HorizontalOptions = LayoutOptions.Center,
+                Padding = new Thickness(0, 8)
+            };
+            buttonRow.Children.Add(_retryBtn);
+            buttonRow.Children.Add(_copyErrorBtn);
+
+            var controlsStack = new VerticalStackLayout
+            {
+                Padding = new Thickness(16),
+                Spacing = 8
+            };
+            controlsStack.Children.Add(_statusLabel);
+            controlsStack.Children.Add(_errorLabel);
+            controlsStack.Children.Add(buttonRow);
+            controlsStack.Children.Add(closeBtn);
+
+            var rootGrid = new Grid
             {
                 RowDefinitions =
                 {
                     new RowDefinition(GridLength.Star),
-                    new RowDefinition(GridLength.Auto),
                     new RowDefinition(GridLength.Auto)
                 }
             };
-            Grid.SetRow(_webView, 0);
-            Grid.SetRow(_statusLabel, 1);
-            Grid.SetRow(closeBtn, 2);
-            grid.Children.Add(_webView);
-            grid.Children.Add(_statusLabel);
-            grid.Children.Add(closeBtn);
-            Content = grid;
+            rootGrid.Children.Add(_webView);
+            rootGrid.Children.Add(controlsStack);
+            Grid.SetRow(controlsStack, 1);
+
+            Content = rootGrid;
         }
     }
 
@@ -60,70 +130,292 @@ public class ClaudeProWebViewPage : ContentPage
 
     private async void OnNavigated(object? sender, WebNavigatedEventArgs e)
     {
-        if (e.Result != WebNavigationResult.Success) return;
+        System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] OnNavigated: result={e.Result}, url={e.Url}");
+        if (e.Result != WebNavigationResult.Success)
+        {
+            _statusLabel.Text = $"Navigation failed: {e.Result}";
+            return;
+        }
         if (!e.Url.StartsWith("https://claude.ai")) return;
-        if (_extracted) return;
+        if (_extractedUrl == e.Url) return; // Already successfully extracted from this exact URL
 
         _statusLabel.Text = "Fetching quota data\u2026";
-        await Task.Delay(1500);
+        _retryBtn.IsVisible = false;
 
+        // Try to access CoreWebView2 directly via the PlatformView cast
+        Microsoft.Web.WebView2.Core.CoreWebView2? coreWV2 = null;
+        try
+        {
+            if (_webView.Handler is Microsoft.Maui.Handlers.IWebViewHandler webViewHandler)
+            {
+                var platformView = webViewHandler.PlatformView;
+                System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] PlatformView type: {platformView?.GetType().FullName}");
+                if (platformView is Microsoft.UI.Xaml.Controls.WebView2 wv2)
+                {
+                    coreWV2 = wv2.CoreWebView2;
+                    System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] CoreWebView2: {coreWV2 != null}");
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] PlatformView is not WebView2, trying CoreWebView2 property...");
+                    var pi = platformView?.GetType().GetProperty("CoreWebView2");
+                    if (pi != null)
+                    {
+                        coreWV2 = pi.GetValue(platformView) as Microsoft.Web.WebView2.Core.CoreWebView2;
+                        System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] CoreWebView2 via reflection: {coreWV2 != null}");
+                    }
+                }
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] Handler type: {_webView.Handler?.GetType().FullName ?? "null"}");
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] CoreWebView2 access failed: {ex.Message}");
+        }
+
+        // Wait for WebView2 runtime and React SPA to fully initialize after navigation
+        await Task.Delay(5000);
+
+        // Poll for document ready state before attempting JS eval
+        for (int poll = 0; poll < 5; poll++)
+        {
+            string? readyState = null;
+            try
+            {
+                readyState = await _webView.EvaluateJavaScriptAsync("document.readyState");
+                System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] Document readyState: {readyState}");
+                if (readyState != null && readyState.Contains("complete", StringComparison.OrdinalIgnoreCase))
+                    break;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] readyState poll {poll} failed: {ex.Message}");
+            }
+            await Task.Delay(2000);
+        }
+
+        // Probe with a simple JS eval first to verify the WebView can return any result
+        string? probe = null;
+        try
+        {
+            System.Diagnostics.Debug.WriteLine("[ClaudeProWebView] Probing with simple JSON.stringify eval...");
+            probe = await _webView.EvaluateJavaScriptAsync("JSON.stringify({ probe: 'ok', ts: Date.now() })");
+            System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] Probe result: {(probe ?? "null")}");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] Probe EXCEPTION: {ex}");
+        }
+
+        // Test sync eval
+        string? syncTest = null;
+        try
+        {
+            System.Diagnostics.Debug.WriteLine("[ClaudeProWebView] Testing sync JS (document.title)...");
+            syncTest = await coreWV2!.ExecuteScriptAsync("document.title");
+            System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] Sync test result: {(syncTest ?? "null")}");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] Sync test EXCEPTION: {ex}");
+        }
+
+        // Test if async returns the Promise object (which serializes to {})
+        string? asyncTest = null;
+        try
+        {
+            System.Diagnostics.Debug.WriteLine("[ClaudeProWebView] Testing async IIFE without top-level await...");
+            asyncTest = await coreWV2!.ExecuteScriptAsync("(async () => 'async result')()");
+            System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] Async IIFE test: {(asyncTest ?? "null")}");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] Async IIFE test EXCEPTION: {ex}");
+        }
+
+        // Two-step pattern: JS stores result in window._claudeResult, then we retrieve it.
+        // This avoids ExecuteScriptAsync's async/await handling issues.
         const string js = """
             (async () => {
                 try {
                     const orgsResp = await fetch('/api/organizations', { credentials: 'include' });
-                    if (!orgsResp.ok) return JSON.stringify({ error: 'orgs:' + orgsResp.status });
-                    const orgs = await orgsResp.json();
+                    const orgsText = await orgsResp.text();
+                    if (!orgsResp.ok) { window._claudeResult = JSON.stringify({ error: 'orgs:' + orgsResp.status, body: orgsText.substring(0, 200) }); return; }
+                    let orgs;
+                    try { orgs = JSON.parse(orgsText); } catch { window._claudeResult = JSON.stringify({ error: 'orgs:bad_json' }); return; }
                     const uuid = orgs[0]?.uuid;
-                    if (!uuid) return JSON.stringify({ error: 'no uuid' });
-                    const usageResp = await fetch(`/api/organizations/${uuid}/usage`, { credentials: 'include' });
-                    if (!usageResp.ok) return JSON.stringify({ error: 'usage:' + usageResp.status });
-                    const data = await usageResp.json();
-                    return JSON.stringify({ ok: true, data });
+                    if (!uuid) { window._claudeResult = JSON.stringify({ error: 'no uuid' }); return; }
+                    const usageResp = await fetch('/api/organizations/' + uuid + '/usage', { credentials: 'include' });
+                    const usageText = await usageResp.text();
+                    if (!usageResp.ok) { window._claudeResult = JSON.stringify({ error: 'usage:' + usageResp.status, body: usageText.substring(0, 200) }); return; }
+                    let data;
+                    try { data = JSON.parse(usageText); } catch { window._claudeResult = JSON.stringify({ error: 'usage:bad_json' }); return; }
+                    window._claudeResult = JSON.stringify({ ok: true, data });
                 } catch (ex) {
-                    return JSON.stringify({ error: ex.message });
+                    window._claudeResult = JSON.stringify({ error: 'js:' + ex.message });
                 }
-            })()
+            })();
+            'started';
             """;
 
-        var raw = await _webView.EvaluateJavaScriptAsync(js);
-        if (string.IsNullOrEmpty(raw)) { _tcs.TrySetResult(null); return; }
+        string? raw = null;
+        string? errorDetail = null;
 
-        var json = System.Text.RegularExpressions.Regex.Unescape(raw.Trim('"'));
-        var record = ParseUsageResponse(json);
+        try
+        {
+            System.Diagnostics.Debug.WriteLine("[ClaudeProWebView] Executing async JS (two-step pattern)...");
+            raw = await coreWV2!.ExecuteScriptAsync(js);
+            System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] ExecuteScriptAsync (fire-and-get) returned: {(raw == null ? "null" : raw)}");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] CoreWebView2.ExecuteScriptAsync EXCEPTION: {ex}");
+            errorDetail = "CoreWV2Exception: " + ex.Message;
+        }
+
+        // Step 2: retrieve the stored result (this works correctly since it's synchronous)
+        if (string.IsNullOrEmpty(raw) || raw == "\"started\"")
+        {
+            try
+            {
+                System.Diagnostics.Debug.WriteLine("[ClaudeProWebView] Retrieving result from window._claudeResult...");
+                await Task.Delay(500); // Brief wait for async JS to complete
+                raw = await coreWV2!.ExecuteScriptAsync("window._claudeResult || 'null'");
+                System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] Retrieved result: {(raw == null ? "null" : raw)}");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] Retrieve EXCEPTION: {ex}");
+                errorDetail = "RetrieveException: " + ex.Message;
+            }
+        }
+
+        // Fall back to MAUI wrapper for both fire-and-forget and retrieval steps
+        if (string.IsNullOrEmpty(raw) || raw == "\"started\"")
+        {
+            try
+            {
+                System.Diagnostics.Debug.WriteLine("[ClaudeProWebView] Fallback: executing via MAUI wrapper...");
+                raw = await _webView.EvaluateJavaScriptAsync(js);
+                System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] MAUI wrapper returned: {(raw == null ? "null" : raw)}");
+                if (!string.IsNullOrEmpty(raw) && raw != "\"started\"")
+                {
+                    // Already got result
+                }
+                else
+                {
+                    await Task.Delay(500);
+                    var retrieved = await _webView.EvaluateJavaScriptAsync("window._claudeResult || 'null'");
+                    System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] MAUI retrieved: {(retrieved == null ? "null" : retrieved)}");
+                    if (!string.IsNullOrEmpty(retrieved) && retrieved != "null")
+                        raw = retrieved;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] MAUI fallback EXCEPTION: {ex}");
+                errorDetail = "MauiFallbackException: " + ex.Message;
+            }
+        }
+
+        if (string.IsNullOrEmpty(raw) || raw == "\"started\"" || raw == "null")
+        {
+            if (_silent) { _tcs.TrySetResult(null); return; }
+            var msg = errorDetail != null
+                ? $"JS error: {errorDetail}. Try again."
+                : "Not signed in \u2014 log in at claude.ai above, then tap Retry.";
+            _statusLabel.Text = msg;
+            _lastError = msg;
+            _errorLabel.Text = msg;
+            _errorLabel.IsVisible = true;
+            _copyErrorBtn.IsVisible = true;
+            _retryBtn.IsVisible = true;
+            System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] Error UI shown — retryBtn visible: {_retryBtn.IsVisible}");
+            return;
+        }
+
+        // raw is a JSON string literal — parse it as JSON to get the actual object string
+        string? json = null;
+        try
+        {
+            json = System.Text.Json.JsonSerializer.Deserialize<string>(raw);
+        }
+        catch
+        {
+            // Fallback: manual trim
+            json = raw.Trim('"');
+        }
+
+        if (string.IsNullOrEmpty(json))
+        {
+            if (_silent) { _tcs.TrySetResult(null); return; }
+            _lastError = "Empty response from quota API";
+            _statusLabel.Text = "Empty response. Tap Retry.";
+            _errorLabel.Text = "Empty response from quota API";
+            _errorLabel.IsVisible = true;
+            _retryBtn.IsVisible = true;
+            return;
+        }
+
+        System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] Parsed JSON: {json.Substring(0, Math.Min(json.Length, 100))}");
+        var record = ParseUsageResponse(json, out var parseError);
 
         if (record != null)
         {
-            _extracted = true;
+            _extractedUrl = e.Url;
             _statusLabel.Text = $"Session: {record.FiveHourUtilization}% \u00b7 Weekly: {record.SevenDayUtilization}%";
+            _errorLabel.IsVisible = false;
             _tcs.TrySetResult(record);
         }
         else
         {
-            _statusLabel.Text = "Could not parse response. Try logging in at claude.ai first.";
-            if (_silent) _tcs.TrySetResult(null);
+            if (_silent) { _tcs.TrySetResult(null); return; }
+            var displayError = string.IsNullOrEmpty(parseError) ? "Unknown parse error" : parseError;
+            _statusLabel.Text = "Could not parse response. Log in at claude.ai then tap Retry.";
+            _lastError = displayError;
+            _errorLabel.Text = displayError;
+            _errorLabel.IsVisible = true;
+            _copyErrorBtn.IsVisible = true;
+            _retryBtn.IsVisible = true;
+            System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] Parse error UI shown — retryBtn visible: {_retryBtn.IsVisible}");
+            return;
         }
     }
 
-    internal static QuotaRecord? ParseUsageResponse(string json)
+    internal static QuotaRecord? ParseUsageResponse(string json, out string? error)
     {
+        error = null;
         try
         {
             using var doc = System.Text.Json.JsonDocument.Parse(json);
             var root = doc.RootElement;
-            if (root.TryGetProperty("error", out _)) return null;
-            if (!root.TryGetProperty("data", out var data)) return null;
+            if (root.TryGetProperty("error", out var errProp))
+            {
+                error = errProp.GetString();
+                return null;
+            }
+            if (!root.TryGetProperty("data", out var data))
+            {
+                error = "Missing 'data' field";
+                return null;
+            }
 
             var record = new QuotaRecord { FetchedAt = DateTime.UtcNow };
 
             if (data.TryGetProperty("five_hour", out var fh) && fh.ValueKind != System.Text.Json.JsonValueKind.Null)
             {
                 record.FiveHourUtilization = fh.GetProperty("utilization").GetInt32();
-                record.FiveHourResetsAt = fh.GetProperty("resets_at").GetDateTime().ToUniversalTime();
+                if (fh.TryGetProperty("resets_at", out var fhReset) && fhReset.ValueKind == System.Text.Json.JsonValueKind.String)
+                    record.FiveHourResetsAt = fhReset.GetDateTime().ToUniversalTime();
             }
             if (data.TryGetProperty("seven_day", out var sd) && sd.ValueKind != System.Text.Json.JsonValueKind.Null)
             {
                 record.SevenDayUtilization = sd.GetProperty("utilization").GetInt32();
-                record.SevenDayResetsAt = sd.GetProperty("resets_at").GetDateTime().ToUniversalTime();
+                if (sd.TryGetProperty("resets_at", out var sdReset) && sdReset.ValueKind == System.Text.Json.JsonValueKind.String)
+                    record.SevenDayResetsAt = sdReset.GetDateTime().ToUniversalTime();
             }
             if (data.TryGetProperty("extra_usage", out var eu) && eu.ValueKind != System.Text.Json.JsonValueKind.Null)
             {
@@ -133,6 +425,10 @@ public class ClaudeProWebViewPage : ContentPage
             }
             return record;
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return null;
+        }
     }
 }
