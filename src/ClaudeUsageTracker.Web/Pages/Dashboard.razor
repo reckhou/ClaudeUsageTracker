@@ -1,0 +1,129 @@
+@page "/dashboard"
+@using ClaudeUsageTracker.Core.ViewModels
+@inject DashboardViewModel Vm
+@inject NavigationManager Nav
+@inject ClaudeUsageTracker.Core.Services.ISecureStorageService Storage
+
+<div class="container-fluid p-4">
+
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">Claude Usage Tracker</h2>
+        <button class="btn btn-primary" disabled="@Vm.IsRefreshing" @onclick="RefreshAsync">
+            @if (Vm.IsRefreshing)
+            {
+                <span class="spinner-border spinner-border-sm me-1" />
+                <span>Refreshing...</span>
+            }
+            else
+            {
+                <span>Refresh</span>
+            }
+        </button>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card p-3">
+                <small class="text-muted">Today</small>
+                <div class="fs-3 fw-bold">@Vm.TodayCostUsd.ToString("C")</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card p-3">
+                <small class="text-muted">This Month</small>
+                <div class="fs-3 fw-bold">@Vm.MonthCostUsd.ToString("C")</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card p-3">
+                <small class="text-muted">Last Updated</small>
+                <div class="fs-5">@(string.IsNullOrEmpty(Vm.LastUpdated) ? "—" : Vm.LastUpdated)</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bar Chart -->
+    <div class="card p-3 mb-4">
+        <h6 class="mb-3">Daily Cost — Last 30 Days</h6>
+        @if (Vm.DailyUsages.Count > 0)
+        {
+            var maxCost = Vm.DailyUsages.Max(d => d.CostUsd);
+            if (maxCost == 0) maxCost = 1;
+            <div style="display:flex; align-items:flex-end; height:120px; gap:2px;">
+                @foreach (var day in Vm.DailyUsages)
+                {
+                    var pct = (double)(day.CostUsd / maxCost) * 100;
+                    <div style="flex:1; background:#512BD4; height:@(pct)%; min-height:2px;"
+                         title="@day.Date.ToString("MMM dd"): @day.CostUsd.ToString("C")"></div>
+                }
+            </div>
+            <div class="d-flex justify-content-between mt-1">
+                <small class="text-muted">@Vm.DailyUsages.First().Date.ToString("MMM dd")</small>
+                <small class="text-muted">@Vm.DailyUsages.Last().Date.ToString("MMM dd")</small>
+            </div>
+        }
+        else
+        {
+            <p class="text-muted">No data yet — click Refresh.</p>
+        }
+    </div>
+
+    <!-- Model Breakdown -->
+    <div class="card p-3">
+        <h6 class="mb-3">Model Breakdown</h6>
+        @if (Vm.ModelBreakdown.Count > 0)
+        {
+            var maxTokens = Vm.ModelBreakdown.Max(m => m.Tokens);
+            if (maxTokens == 0) maxTokens = 1;
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Model</th>
+                        <th>Tokens</th>
+                        <th>Cost</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var m in Vm.ModelBreakdown)
+                    {
+                        var pct = (double)m.Tokens / maxTokens * 100;
+                        <tr>
+                            <td>
+                                <div>@m.Model</div>
+                                <div style="background:#512BD4; height:6px; width:@(pct)%; border-radius:3px;"></div>
+                            </td>
+                            <td>@m.Tokens.ToString("N0")</td>
+                            <td>@m.CostUsd.ToString("C")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        else
+        {
+            <p class="text-muted">No data yet.</p>
+        }
+    </div>
+
+    <p class="text-muted small mt-3">Note: Priority Tier costs are not included in the cost report.</p>
+</div>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        var key = await Storage.GetAsync("admin_api_key");
+        if (string.IsNullOrEmpty(key))
+        {
+            Nav.NavigateTo("/setup");
+            return;
+        }
+        Vm.PropertyChanged += (_, _) => StateHasChanged();
+        Vm.DailyUsages.CollectionChanged += (_, _) => StateHasChanged();
+        Vm.ModelBreakdown.CollectionChanged += (_, _) => StateHasChanged();
+        await RefreshAsync();
+    }
+
+    private async Task RefreshAsync() => await Vm.RefreshCommand.ExecuteAsync(null);
+}

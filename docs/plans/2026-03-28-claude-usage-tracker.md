@@ -22,16 +22,16 @@
 
 ## Progress
 
-- [ ] Task 1: Solution scaffolding
-- [ ] Task 2: Core models & service interfaces
-- [ ] Task 3: Anthropic API service
-- [ ] Task 4: SQLite data service
-- [ ] Task 5: MAUI project wiring (SecureStorage + DI)
-- [ ] Task 6: First-run setup flow — ViewModel + MAUI view
-- [ ] Task 7: Dashboard ViewModel
-- [ ] Task 8: MAUI Windows full dashboard view
-- [ ] Task 9: MAUI Android/iOS compact mobile view
-- [ ] Task 10: Blazor WASM project — storage + setup page
+- [x] Task 1: Solution scaffolding
+- [x] Task 2: Core models & service interfaces
+- [x] Task 3: Anthropic API service
+- [x] Task 4: SQLite data service
+- [x] Task 5: MAUI project wiring (SecureStorage + DI)
+- [x] Task 6: First-run setup flow — ViewModel + MAUI view
+- [x] Task 7: Dashboard ViewModel
+- [x] Task 8: MAUI Windows full dashboard view
+- [x] Task 9: MAUI Android/iOS compact mobile view
+- [x] Task 10: Blazor WASM project — storage + setup page
 - [ ] Task 11: Blazor WASM dashboard page
 
 ---
