@@ -21,10 +21,10 @@ public partial class SetupViewModel(
     {
         IsValidating = true;
         ErrorMessage = "";
-        bool valid = await api.ValidateApiKeyAsync(ApiKey);
+        var (valid, error) = await api.ValidateApiKeyAsync(ApiKey);
         if (!valid)
         {
-            ErrorMessage = "Invalid Admin API key. Make sure it starts with sk-ant-admin.";
+            ErrorMessage = error ?? "Unknown error";
             HasError = true;
             IsValidating = false;
             return;

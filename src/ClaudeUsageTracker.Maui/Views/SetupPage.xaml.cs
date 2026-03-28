@@ -19,4 +19,9 @@ public partial class SetupPage : ContentPage
         _vm.NavigateToDashboard -= OnNavigateToDashboard;
         await Shell.Current.GoToAsync("//dashboard");
     }
+
+    private async void OnCopyErrorClicked(object? sender, EventArgs e)
+    {
+        await Clipboard.Default.SetTextAsync(_vm.ErrorMessage);
+    }
 }

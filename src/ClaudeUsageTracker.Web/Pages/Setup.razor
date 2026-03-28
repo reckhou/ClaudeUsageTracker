@@ -19,7 +19,11 @@
 
     @if (Vm.HasError)
     {
-        <div class="alert alert-danger">@Vm.ErrorMessage</div>
+        <div class="alert alert-danger d-flex justify-content-between align-items-start">
+            <span>@Vm.ErrorMessage</span>
+            <button class="btn btn-sm btn-outline-danger ms-2 flex-shrink-0"
+                    @onclick="CopyError">Copy</button>
+        </div>
     }
 
     <button class="btn btn-primary w-100"
@@ -38,6 +42,8 @@
 </div>
 
 @code {
+    [Inject] IJSRuntime JS { get; set; } = default!;
+
     protected override void OnInitialized()
     {
         Vm.NavigateToDashboard += () => Nav.NavigateTo("/dashboard");
@@ -49,4 +55,7 @@
     {
         if (e.Key == "Enter") await SaveAsync();
     }
+
+    private async Task CopyError() =>
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", Vm.ErrorMessage);
 }

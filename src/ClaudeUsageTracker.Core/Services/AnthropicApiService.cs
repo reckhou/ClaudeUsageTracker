@@ -27,7 +27,7 @@ public class AnthropicApiService(HttpClient http)
         do
         {
             var url = $"{BaseUrl}/v1/organizations/usage_report/messages" +
-                      $"?start_time={from:yyyy-MM-dd}&end_time={to:yyyy-MM-dd}" +
+                      $"?starting_at={from:yyyy-MM-dd}&ending_at={to:yyyy-MM-dd}" +
                       $"&bucket_width=1d&group_by[]=model";
             if (nextPage != null)
                 url += $"&page_token={Uri.EscapeDataString(nextPage)}";
@@ -68,7 +68,7 @@ public class AnthropicApiService(HttpClient http)
         do
         {
             var url = $"{BaseUrl}/v1/organizations/cost_report" +
-                      $"?start_time={from:yyyy-MM-dd}&end_time={to:yyyy-MM-dd}" +
+                      $"?starting_at={from:yyyy-MM-dd}&ending_at={to:yyyy-MM-dd}" +
                       $"&bucket_width=1d";
             if (nextPage != null)
                 url += $"&page_token={Uri.EscapeDataString(nextPage)}";
@@ -97,21 +97,23 @@ public class AnthropicApiService(HttpClient http)
         return records;
     }
 
-    public async Task<bool> ValidateApiKeyAsync(string key)
+    public async Task<(bool Success, string? Error)> ValidateApiKeyAsync(string key)
     {
         SetApiKey(key);
         try
         {
             var yesterday = DateTime.UtcNow.Date.AddDays(-1);
             var url = $"{BaseUrl}/v1/organizations/usage_report/messages" +
-                      $"?start_time={yesterday:yyyy-MM-dd}&end_time={DateTime.UtcNow.Date:yyyy-MM-dd}" +
+                      $"?starting_at={yesterday:yyyy-MM-dd}&ending_at={DateTime.UtcNow.Date:yyyy-MM-dd}" +
                       $"&bucket_width=1d";
             var response = await http.GetAsync(url);
-            return response.IsSuccessStatusCode;
+            if (response.IsSuccessStatusCode) return (true, null);
+            var body = await response.Content.ReadAsStringAsync();
+            return (false, $"HTTP {(int)response.StatusCode}: {body}");
         }
-        catch
+        catch (Exception ex)
         {
-            return false;
+            return (false, $"Network error: {ex.Message}");
         }
     }
 

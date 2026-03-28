@@ -29,9 +29,18 @@
                Text="{Binding ApiKey}"
                ReturnCommand="{Binding SaveCommand}" />
 
-        <Label Text="{Binding ErrorMessage}"
-               TextColor="Red"
-               IsVisible="{Binding HasError}" />
+        <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HasError}">
+            <Label Grid.Column="0"
+                   Text="{Binding ErrorMessage}"
+                   TextColor="Red" />
+            <Button Grid.Column="1"
+                    Text="Copy"
+                    FontSize="11"
+                    Padding="8,4"
+                    Clicked="OnCopyErrorClicked"
+                    BackgroundColor="Transparent"
+                    TextColor="Red" />
+        </Grid>
 
         <Button Text="Connect"
                 Command="{Binding SaveCommand}"
