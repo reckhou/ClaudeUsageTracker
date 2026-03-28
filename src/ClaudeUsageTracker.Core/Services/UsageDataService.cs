@@ -1,3 +1,4 @@
+using System.Globalization;
 using ClaudeUsageTracker.Core.Models;
 using SQLite;
 
@@ -6,13 +7,23 @@ namespace ClaudeUsageTracker.Core.Services;
 public class UsageDataService(string dbPath) : IUsageDataService
 {
     private SQLiteAsyncConnection? _db;
+    private readonly SemaphoreSlim _initLock = new(1, 1);
 
     public async Task InitAsync()
     {
         if (_db != null) return;
-        _db = new SQLiteAsyncConnection(dbPath);
-        await _db.CreateTableAsync<UsageRecord>();
-        await _db.CreateTableAsync<CostRecord>();
+        await _initLock.WaitAsync();
+        try
+        {
+            if (_db != null) return;
+            _db = new SQLiteAsyncConnection(dbPath);
+            await _db.CreateTableAsync<UsageRecord>();
+            await _db.CreateTableAsync<CostRecord>();
+        }
+        finally
+        {
+            _initLock.Release();
+        }
     }
 
     public async Task UpsertUsageRecordsAsync(IEnumerable<UsageRecord> records)
@@ -61,7 +72,12 @@ public class UsageDataService(string dbPath) : IUsageDataService
         var result = await _db!.ExecuteScalarAsync<string>(
             "SELECT MAX(FetchedAt) FROM UsageRecords");
         if (string.IsNullOrEmpty(result)) return null;
-        return DateTime.Parse(result);
+        if (long.TryParse(result, out var ticks))
+            return new DateTime(ticks, DateTimeKind.Utc);
+        if (DateTime.TryParse(result, CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal, out var dt))
+            return dt;
+        return null;
     }
 
     private void EnsureInit()

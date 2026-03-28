@@ -27,10 +27,10 @@ public class AnthropicApiService(HttpClient http)
         do
         {
             var url = $"{BaseUrl}/v1/organizations/usage_report/messages" +
-                      $"?starting_at={from:yyyy-MM-dd}&ending_at={to:yyyy-MM-dd}" +
+                      $"?starting_at={from:yyyy-MM-ddTHH:mm:ssZ}&ending_at={to:yyyy-MM-ddTHH:mm:ssZ}" +
                       $"&bucket_width=1d&group_by[]=model";
             if (nextPage != null)
-                url += $"&page_token={Uri.EscapeDataString(nextPage)}";
+                url += $"&page={Uri.EscapeDataString(nextPage)}";
 
             var response = await http.GetAsync(url);
             response.EnsureSuccessStatusCode();
@@ -39,18 +39,22 @@ public class AnthropicApiService(HttpClient http)
             var page = JsonSerializer.Deserialize<UsageReportPage>(json, JsonOptions);
             if (page?.Data == null) break;
 
-            foreach (var item in page.Data)
+            foreach (var bucket in page.Data)
             {
-                records.Add(new UsageRecord
+                foreach (var item in bucket.Results ?? [])
                 {
-                    BucketStart = item.BucketStart,
-                    Model = item.Model ?? "",
-                    InputTokens = item.InputTokens,
-                    OutputTokens = item.OutputTokens,
-                    CacheReadTokens = item.CacheReadInputTokens,
-                    CacheCreationTokens = item.CacheCreationInputTokens,
-                    FetchedAt = now
-                });
+                    records.Add(new UsageRecord
+                    {
+                        BucketStart = bucket.StartingAt,
+                        Model = item.Model ?? "",
+                        InputTokens = item.UncachedInputTokens,
+                        OutputTokens = item.OutputTokens,
+                        CacheReadTokens = item.CacheReadInputTokens,
+                        CacheCreationTokens = (item.CacheCreation?.Ephemeral1hInputTokens ?? 0) +
+                                              (item.CacheCreation?.Ephemeral5mInputTokens ?? 0),
+                        FetchedAt = now
+                    });
+                }
             }
 
             nextPage = page.HasMore ? page.NextPage : null;
@@ -68,10 +72,10 @@ public class AnthropicApiService(HttpClient http)
         do
         {
             var url = $"{BaseUrl}/v1/organizations/cost_report" +
-                      $"?starting_at={from:yyyy-MM-dd}&ending_at={to:yyyy-MM-dd}" +
+                      $"?starting_at={from:yyyy-MM-ddTHH:mm:ssZ}&ending_at={to:yyyy-MM-ddTHH:mm:ssZ}" +
                       $"&bucket_width=1d";
             if (nextPage != null)
-                url += $"&page_token={Uri.EscapeDataString(nextPage)}";
+                url += $"&page={Uri.EscapeDataString(nextPage)}";
 
             var response = await http.GetAsync(url);
             response.EnsureSuccessStatusCode();
@@ -80,15 +84,19 @@ public class AnthropicApiService(HttpClient http)
             var page = JsonSerializer.Deserialize<CostReportPage>(json, JsonOptions);
             if (page?.Data == null) break;
 
-            foreach (var item in page.Data)
+            foreach (var bucket in page.Data)
             {
-                records.Add(new CostRecord
+                foreach (var item in bucket.Results ?? [])
                 {
-                    BucketStart = item.BucketStart,
-                    Description = item.Description ?? "",
-                    CostUsd = item.Amount,
-                    FetchedAt = now
-                });
+                    records.Add(new CostRecord
+                    {
+                        BucketStart = bucket.StartingAt,
+                        Description = item.Description ?? "",
+                        CostUsd = decimal.TryParse(item.Amount, System.Globalization.NumberStyles.Any,
+                            System.Globalization.CultureInfo.InvariantCulture, out var amt) ? amt / 100m : 0m,
+                        FetchedAt = now
+                    });
+                }
             }
 
             nextPage = page.HasMore ? page.NextPage : null;
@@ -103,8 +111,9 @@ public class AnthropicApiService(HttpClient http)
         try
         {
             var yesterday = DateTime.UtcNow.Date.AddDays(-1);
+            var today = DateTime.UtcNow.Date;
             var url = $"{BaseUrl}/v1/organizations/usage_report/messages" +
-                      $"?starting_at={yesterday:yyyy-MM-dd}&ending_at={DateTime.UtcNow.Date:yyyy-MM-dd}" +
+                      $"?starting_at={yesterday:yyyy-MM-ddTHH:mm:ssZ}&ending_at={today:yyyy-MM-ddTHH:mm:ssZ}" +
                       $"&bucket_width=1d";
             var response = await http.GetAsync(url);
             if (response.IsSuccessStatusCode) return (true, null);
@@ -125,32 +134,53 @@ public class AnthropicApiService(HttpClient http)
 
     private class UsageReportPage
     {
-        public List<UsageReportItem>? Data { get; set; }
+        public List<UsageBucket>? Data { get; set; }
         public bool HasMore { get; set; }
         public string? NextPage { get; set; }
     }
 
-    private class UsageReportItem
+    private class UsageBucket
     {
-        public DateTime BucketStart { get; set; }
+        public DateTime StartingAt { get; set; }
+        public DateTime EndingAt { get; set; }
+        public List<UsageResult>? Results { get; set; }
+    }
+
+    private class UsageResult
+    {
         public string? Model { get; set; }
-        public long InputTokens { get; set; }
+        public long UncachedInputTokens { get; set; }
         public long OutputTokens { get; set; }
         public long CacheReadInputTokens { get; set; }
-        public long CacheCreationInputTokens { get; set; }
+        public CacheCreationData? CacheCreation { get; set; }
+    }
+
+    private class CacheCreationData
+    {
+        [JsonPropertyName("ephemeral_1h_input_tokens")]
+        public long Ephemeral1hInputTokens { get; set; }
+        [JsonPropertyName("ephemeral_5m_input_tokens")]
+        public long Ephemeral5mInputTokens { get; set; }
     }
 
     private class CostReportPage
     {
-        public List<CostReportItem>? Data { get; set; }
+        public List<CostBucket>? Data { get; set; }
         public bool HasMore { get; set; }
         public string? NextPage { get; set; }
     }
 
-    private class CostReportItem
+    private class CostBucket
     {
-        public DateTime BucketStart { get; set; }
+        public DateTime StartingAt { get; set; }
+        public DateTime EndingAt { get; set; }
+        public List<CostResult>? Results { get; set; }
+    }
+
+    private class CostResult
+    {
+        public string? Amount { get; set; }
+        public string? Currency { get; set; }
         public string? Description { get; set; }
-        public decimal Amount { get; set; }
     }
 }

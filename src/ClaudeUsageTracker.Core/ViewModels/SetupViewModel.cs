@@ -30,9 +30,20 @@ public partial class SetupViewModel(
             return;
         }
         HasError = false;
-        await storage.SetAsync("admin_api_key", ApiKey);
-        await db.InitAsync();
-        IsValidating = false;
-        NavigateToDashboard?.Invoke();
+        try
+        {
+            await storage.SetAsync("admin_api_key", ApiKey);
+            await db.InitAsync();
+            NavigateToDashboard?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Failed to save: {ex.Message}";
+            HasError = true;
+        }
+        finally
+        {
+            IsValidating = false;
+        }
     }
 }

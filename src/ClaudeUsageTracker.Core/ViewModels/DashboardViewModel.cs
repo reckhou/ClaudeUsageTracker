@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Net.Http;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ClaudeUsageTracker.Core.Services;
@@ -17,6 +18,8 @@ public partial class DashboardViewModel(
     [ObservableProperty] private string _lastUpdated = "";
     [ObservableProperty] private string _topModelName = "";
     [ObservableProperty] private bool _hasTopModel;
+    [ObservableProperty] private string _errorMessage = "";
+    [ObservableProperty] private bool _hasError;
 
     public ObservableCollection<DailyUsage> DailyUsages { get; } = new();
     public ObservableCollection<ModelUsage> ModelBreakdown { get; } = new();
@@ -26,19 +29,21 @@ public partial class DashboardViewModel(
     {
         if (IsRefreshing) return;
 
-        await db.InitAsync();
-
-        // Respect 1-per-minute polling guideline
-        var lastFetch = await db.GetLastFetchedAtAsync();
-        if (lastFetch.HasValue && (DateTime.UtcNow - lastFetch.Value).TotalSeconds < 60)
-        {
-            await LoadFromDbAsync();
-            return;
-        }
-
+        ErrorMessage = "";
+        HasError = false;
         IsRefreshing = true;
         try
         {
+            await db.InitAsync();
+
+            // Respect 1-per-minute polling guideline
+            var lastFetch = await db.GetLastFetchedAtAsync();
+            if (lastFetch.HasValue && (DateTime.UtcNow - lastFetch.Value).TotalSeconds < 60)
+            {
+                await LoadFromDbAsync();
+                return;
+            }
+
             var key = await storage.GetAsync("admin_api_key");
             if (string.IsNullOrEmpty(key)) return;
 
@@ -54,6 +59,17 @@ public partial class DashboardViewModel(
             await db.UpsertCostRecordsAsync(costRecords);
 
             await LoadFromDbAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            ErrorMessage = $"Network error: {ex.Message}";
+            HasError = true;
+            try { await LoadFromDbAsync(); } catch { }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Refresh failed: {ex.Message}";
+            HasError = true;
         }
         finally
         {

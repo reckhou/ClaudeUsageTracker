@@ -11,4 +11,9 @@
         ContentTemplate="{DataTemplate views:SetupPage}"
         Route="setup" />
 
+    <ShellContent
+        Title="Dashboard"
+        ContentTemplate="{DataTemplate views:DashboardPage}"
+        Route="dashboard" />
+
 </Shell>

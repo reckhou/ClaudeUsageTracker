@@ -32,7 +32,7 @@
 - [x] Task 8: MAUI Windows full dashboard view
 - [x] Task 9: MAUI Android/iOS compact mobile view
 - [x] Task 10: Blazor WASM project — storage + setup page
-- [ ] Task 11: Blazor WASM dashboard page
+- [x] Task 11: Blazor WASM dashboard page
 
 ---
 

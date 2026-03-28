@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore
+        run: |
+          dotnet restore src/ClaudeUsageTracker.Core/ClaudeUsageTracker.Core.csproj
+          dotnet restore src/ClaudeUsageTracker.Web/ClaudeUsageTracker.Web.csproj
+
+      - name: Build Core
+        run: dotnet build src/ClaudeUsageTracker.Core/ClaudeUsageTracker.Core.csproj --no-restore -c Release
+
+      - name: Build Web (Blazor WASM)
+        run: dotnet build src/ClaudeUsageTracker.Web/ClaudeUsageTracker.Web.csproj --no-restore -c Release
