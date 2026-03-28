@@ -19,6 +19,7 @@ public class UsageDataService(string dbPath) : IUsageDataService
             _db = new SQLiteAsyncConnection(dbPath);
             await _db.CreateTableAsync<UsageRecord>();
             await _db.CreateTableAsync<CostRecord>();
+            await _db.CreateTableAsync<QuotaRecord>();
         }
         finally
         {
@@ -78,6 +79,21 @@ public class UsageDataService(string dbPath) : IUsageDataService
                 DateTimeStyles.AssumeUniversal, out var dt))
             return dt;
         return null;
+    }
+
+    public async Task UpsertQuotaRecordAsync(QuotaRecord record)
+    {
+        EnsureInit();
+        await _db!.ExecuteAsync("DELETE FROM QuotaRecords");
+        await _db.InsertAsync(record);
+    }
+
+    public async Task<QuotaRecord?> GetLatestQuotaAsync()
+    {
+        EnsureInit();
+        return await _db!.Table<QuotaRecord>()
+            .OrderByDescending(r => r.FetchedAt)
+            .FirstOrDefaultAsync();
     }
 
     private void EnsureInit()

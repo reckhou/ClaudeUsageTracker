@@ -9,7 +9,8 @@ namespace ClaudeUsageTracker.Core.ViewModels;
 public partial class DashboardViewModel(
     ISecureStorageService storage,
     AnthropicApiService api,
-    IUsageDataService db) : ObservableObject
+    IUsageDataService db,
+    IClaudeAiUsageService? claudeAi = null) : ObservableObject
 {
     [ObservableProperty] private decimal _todayCostUsd;
     [ObservableProperty] private decimal _monthCostUsd;
@@ -20,6 +21,18 @@ public partial class DashboardViewModel(
     [ObservableProperty] private bool _hasTopModel;
     [ObservableProperty] private string _errorMessage = "";
     [ObservableProperty] private bool _hasError;
+
+    // Weekly (Admin API)
+    [ObservableProperty] private decimal _weekCostUsd;
+    [ObservableProperty] private long _weekTotalTokens;
+    [ObservableProperty] private bool _hasAdminApiData;
+
+    // Claude Pro quota
+    [ObservableProperty] private int _sessionUtilization;
+    [ObservableProperty] private string _sessionResetsAt = "";
+    [ObservableProperty] private int _weeklyUtilization;
+    [ObservableProperty] private string _weeklyResetsAt = "";
+    [ObservableProperty] private bool _hasQuota;
 
     public ObservableCollection<DailyUsage> DailyUsages { get; } = new();
     public ObservableCollection<ModelUsage> ModelBreakdown { get; } = new();
@@ -36,27 +49,25 @@ public partial class DashboardViewModel(
         {
             await db.InitAsync();
 
-            // Respect 1-per-minute polling guideline
-            var lastFetch = await db.GetLastFetchedAtAsync();
-            if (lastFetch.HasValue && (DateTime.UtcNow - lastFetch.Value).TotalSeconds < 60)
-            {
-                await LoadFromDbAsync();
-                return;
-            }
-
             var key = await storage.GetAsync("admin_api_key");
-            if (string.IsNullOrEmpty(key)) return;
+            if (!string.IsNullOrEmpty(key))
+            {
+                // Respect 1-per-minute polling guideline
+                var lastFetch = await db.GetLastFetchedAtAsync();
+                if (!lastFetch.HasValue || (DateTime.UtcNow - lastFetch.Value).TotalSeconds >= 60)
+                {
+                    api.SetApiKey(key);
 
-            api.SetApiKey(key);
+                    var to = DateTime.UtcNow.Date;
+                    var from = to.AddDays(-31);
 
-            var to = DateTime.UtcNow.Date;
-            var from = to.AddDays(-31);
+                    var usageRecords = await api.FetchUsageAsync(from, to);
+                    var costRecords = await api.FetchCostsAsync(from, to);
 
-            var usageRecords = await api.FetchUsageAsync(from, to);
-            var costRecords = await api.FetchCostsAsync(from, to);
-
-            await db.UpsertUsageRecordsAsync(usageRecords);
-            await db.UpsertCostRecordsAsync(costRecords);
+                    await db.UpsertUsageRecordsAsync(usageRecords);
+                    await db.UpsertCostRecordsAsync(costRecords);
+                }
+            }
 
             await LoadFromDbAsync();
         }
@@ -75,6 +86,17 @@ public partial class DashboardViewModel(
         {
             IsRefreshing = false;
         }
+    }
+
+    [RelayCommand]
+    public async Task RefreshQuotaAsync()
+    {
+        if (claudeAi == null) return;
+        var record = await claudeAi.FetchQuotaAsync();
+        if (record == null) return;
+        await db.InitAsync();
+        await db.UpsertQuotaRecordAsync(record);
+        await LoadFromDbAsync();
     }
 
     private async Task LoadFromDbAsync()
@@ -96,6 +118,14 @@ public partial class DashboardViewModel(
         // Month stats
         var monthCosts = costRecords.Where(r => r.BucketStart.Date >= monthStart).ToList();
         MonthCostUsd = monthCosts.Sum(r => r.CostUsd);
+
+        // Weekly stats
+        var daysFromMon = ((int)today.DayOfWeek + 6) % 7;
+        var weekStart = today.AddDays(-daysFromMon);
+        WeekCostUsd = costRecords.Where(r => r.BucketStart.Date >= weekStart).Sum(r => r.CostUsd);
+        WeekTotalTokens = usageRecords.Where(r => r.BucketStart.Date >= weekStart)
+            .Sum(r => r.InputTokens + r.OutputTokens + r.CacheReadTokens + r.CacheCreationTokens);
+        HasAdminApiData = costRecords.Any();
 
         // Daily usage for chart (last 30 days)
         DailyUsages.Clear();
@@ -133,6 +163,26 @@ public partial class DashboardViewModel(
                 : ago.TotalHours < 1 ? $"{(int)ago.TotalMinutes} min ago"
                 : $"{(int)ago.TotalHours}h ago";
         }
+
+        // Quota (Claude Pro)
+        var quota = await db.GetLatestQuotaAsync();
+        HasQuota = quota != null;
+        if (quota != null)
+        {
+            SessionUtilization = quota.FiveHourUtilization;
+            SessionResetsAt = FormatResetsAt(quota.FiveHourResetsAt);
+            WeeklyUtilization = quota.SevenDayUtilization;
+            WeeklyResetsAt = FormatResetsAt(quota.SevenDayResetsAt);
+        }
+    }
+
+    private static string FormatResetsAt(DateTime utc)
+    {
+        var diff = utc - DateTime.UtcNow;
+        if (diff <= TimeSpan.Zero) return "Resetting\u2026";
+        if (diff.TotalHours < 1) return $"Resets in {(int)diff.TotalMinutes} min";
+        if (diff.TotalHours < 24) return $"Resets in {(int)diff.TotalHours} hr {diff.Minutes} min";
+        return $"Resets {utc.ToLocalTime():ddd h:mm tt}";
     }
 }
 

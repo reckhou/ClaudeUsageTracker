@@ -10,4 +10,6 @@ public interface IUsageDataService
     Task<List<UsageRecord>> GetUsageAsync(DateTime from, DateTime to);
     Task<List<CostRecord>> GetCostsAsync(DateTime from, DateTime to);
     Task<DateTime?> GetLastFetchedAtAsync();
+    Task UpsertQuotaRecordAsync(QuotaRecord record);
+    Task<QuotaRecord?> GetLatestQuotaAsync();
 }
