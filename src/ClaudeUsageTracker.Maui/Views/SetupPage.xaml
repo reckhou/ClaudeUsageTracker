@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="ClaudeUsageTracker.Maui.Views.SetupPage"
+             Title="Setup"
+             BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Black}}">
+
+    <VerticalStackLayout Padding="40" Spacing="20" VerticalOptions="Center">
+
+        <Label Text="Claude Usage Tracker"
+               FontSize="28"
+               FontAttributes="Bold"
+               HorizontalOptions="Center" />
+
+        <Label Text="Enter your Anthropic Admin API key to get started."
+               HorizontalOptions="Center"
+               HorizontalTextAlignment="Center"
+               TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
+
+        <Label Text="The key must start with sk-ant-admin and requires Organization Admin role."
+               FontSize="12"
+               HorizontalOptions="Center"
+               HorizontalTextAlignment="Center"
+               TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+
+        <Entry x:Name="ApiKeyEntry"
+               Placeholder="sk-ant-admin..."
+               IsPassword="True"
+               Text="{Binding ApiKey}"
+               ReturnCommand="{Binding SaveCommand}" />
+
+        <Label Text="{Binding ErrorMessage}"
+               TextColor="Red"
+               IsVisible="{Binding HasError}" />
+
+        <Button Text="Connect"
+                Command="{Binding SaveCommand}"
+                IsEnabled="{Binding IsValidating, Converter={StaticResource InvertedBoolConverter}}"
+                HorizontalOptions="Fill" />
+
+        <ActivityIndicator IsRunning="{Binding IsValidating}"
+                           IsVisible="{Binding IsValidating}"
+                           HorizontalOptions="Center" />
+
+    </VerticalStackLayout>
+</ContentPage>

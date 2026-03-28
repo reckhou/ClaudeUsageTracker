@@ -2,6 +2,7 @@ using CommunityToolkit.Maui;
 using ClaudeUsageTracker.Core.Services;
 using ClaudeUsageTracker.Core.ViewModels;
 using ClaudeUsageTracker.Maui.Services;
+using ClaudeUsageTracker.Maui.Views;
 using Microsoft.Extensions.Logging;
 
 namespace ClaudeUsageTracker.Maui;
@@ -30,6 +31,9 @@ public static class MauiProgram
 		});
 		builder.Services.AddTransient<SetupViewModel>();
 		builder.Services.AddTransient<DashboardViewModel>();
+		builder.Services.AddTransient<SetupPage>();
+		builder.Services.AddTransient<DashboardPage>();
+		builder.Services.AddTransient<MobileDashboardPage>();
 
 #if DEBUG
 		builder.Logging.AddDebug();
