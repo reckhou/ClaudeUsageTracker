@@ -1,4 +1,7 @@
-﻿using CommunityToolkit.Maui;
+using CommunityToolkit.Maui;
+using ClaudeUsageTracker.Core.Services;
+using ClaudeUsageTracker.Core.ViewModels;
+using ClaudeUsageTracker.Maui.Services;
 using Microsoft.Extensions.Logging;
 
 namespace ClaudeUsageTracker.Maui;
@@ -16,6 +19,17 @@ public static class MauiProgram
 				fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
 				fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
 			});
+
+		builder.Services.AddSingleton<ISecureStorageService, MauiSecureStorageService>();
+		builder.Services.AddSingleton<HttpClient>();
+		builder.Services.AddSingleton<AnthropicApiService>();
+		builder.Services.AddSingleton<IUsageDataService>(_ =>
+		{
+			var path = Path.Combine(FileSystem.AppDataDirectory, "usage.db");
+			return new UsageDataService(path);
+		});
+		builder.Services.AddTransient<SetupViewModel>();
+		builder.Services.AddTransient<DashboardViewModel>();
 
 #if DEBUG
 		builder.Logging.AddDebug();
