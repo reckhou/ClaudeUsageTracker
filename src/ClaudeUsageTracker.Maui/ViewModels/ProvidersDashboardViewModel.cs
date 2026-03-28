@@ -28,13 +28,16 @@ public partial class ProvidersDashboardViewModel : ObservableObject
     [RelayCommand]
     public async Task LoadAsync()
     {
+        System.Diagnostics.Debug.WriteLine("[ProvidersVM] LoadAsync start");
         await _db.InitAsync();
         var records = await _db.GetAllProviderRecordsAsync();
+        System.Diagnostics.Debug.WriteLine($"[ProvidersVM] LoadAsync got {records.Count} records from DB");
         var grouped = records
             .GroupBy(r => r.Provider)
             .Select(g => g.OrderByDescending(r => r.FetchedAt).First());
         foreach (var record in grouped)
             Providers.Add(ToCard(record));
+        System.Diagnostics.Debug.WriteLine($"[ProvidersVM] LoadAsync added {Providers.Count} providers to collection");
     }
 
     [RelayCommand]
@@ -46,12 +49,16 @@ public partial class ProvidersDashboardViewModel : ObservableObject
         ErrorMessage = "";
         try
         {
+            System.Diagnostics.Debug.WriteLine($"[ProvidersVM] RefreshAsync start. Providers count={Providers.Count}, _providers count={_providers.Count()}");
             foreach (var provider in _providers)
             {
                 var apiKey = await GetApiKeyForProvider(provider.ProviderName);
+                System.Diagnostics.Debug.WriteLine($"[ProvidersVM] Provider={provider.ProviderName}, apiKey={(apiKey == null ? "null" : apiKey.Length > 0 ? $"'{apiKey.Substring(0, Math.Min(apiKey.Length, 4))}...'" : "empty")}");
                 if (string.IsNullOrEmpty(apiKey)) continue;
 
+                System.Diagnostics.Debug.WriteLine($"[ProvidersVM] Fetching {provider.ProviderName}...");
                 var record = await provider.FetchAsync(apiKey);
+                System.Diagnostics.Debug.WriteLine($"[ProvidersVM] {provider.ProviderName} result: {(record == null ? "null" : $"Provider={record.Provider}, IU={record.IntervalUtilization}, WU={record.WeeklyUtilization}")}");
                 if (record == null) continue;
 
                 await _db.UpsertProviderRecordAsync(record);
@@ -61,16 +68,19 @@ public partial class ProvidersDashboardViewModel : ObservableObject
                     Providers[Providers.IndexOf(existing)] = ToCard(record);
                 else
                     Providers.Add(ToCard(record));
+                System.Diagnostics.Debug.WriteLine($"[ProvidersVM] Added/updated {record.Provider}. Providers count now={Providers.Count}");
             }
         }
         catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine($"[ProvidersVM] RefreshAsync exception: {ex}");
             ErrorMessage = ex.Message;
             HasError = true;
         }
         finally
         {
             IsRefreshing = false;
+            System.Diagnostics.Debug.WriteLine($"[ProvidersVM] RefreshAsync done. Providers count={Providers.Count}");
         }
     }
 

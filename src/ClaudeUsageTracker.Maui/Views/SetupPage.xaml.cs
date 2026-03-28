@@ -34,17 +34,25 @@ public partial class SetupPage : ContentPage
 
     private async void OnConnectClaudeProClicked(object sender, EventArgs e)
     {
+        System.Diagnostics.Debug.WriteLine("[SetupPage] OnConnectClaudeProClicked start");
         var service = Handler?.MauiContext?.Services.GetService<IClaudeAiUsageService>();
-        if (service == null) return;
+        if (service == null) { System.Diagnostics.Debug.WriteLine("[SetupPage] IClaudeAiUsageService is null!"); return; }
+        System.Diagnostics.Debug.WriteLine("[SetupPage] Calling ConnectAndFetchAsync...");
         var record = await service.ConnectAndFetchAsync();
+        System.Diagnostics.Debug.WriteLine($"[SetupPage] ConnectAndFetchAsync returned: {(record == null ? "null" : $"FiveHour={record.FiveHourUtilization}, SevenDay={record.SevenDayUtilization}")}");
         if (record != null)
         {
             var storage = Handler?.MauiContext?.Services.GetService<ISecureStorageService>();
             if (storage != null) await storage.SetAsync("claude_pro_connected", "true");
             var db = Handler?.MauiContext?.Services.GetService<IUsageDataService>();
-            if (db != null) { await db.InitAsync(); await db.UpsertQuotaRecordAsync(record); }
+            if (db != null) { await db.InitAsync(); await db.UpsertQuotaRecordAsync(record); System.Diagnostics.Debug.WriteLine("[SetupPage] UpsertQuotaRecordAsync done"); }
             _vm.IsClaudeProConnected = true;
             _vm.ClaudeProStatus = $"Connected \u00b7 Session {record.FiveHourUtilization}% \u00b7 Weekly {record.SevenDayUtilization}%";
+            System.Diagnostics.Debug.WriteLine("[SetupPage] UI updated, IsClaudeProConnected=true");
+        }
+        else
+        {
+            System.Diagnostics.Debug.WriteLine("[SetupPage] record was null — ConnectAndFetchAsync returned nothing");
         }
     }
 }
