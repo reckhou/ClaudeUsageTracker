@@ -26,4 +26,9 @@ public partial class DashboardPage : ContentPage
         CostChart.Drawable = new CostBarChartDrawable(_vm.DailyUsages);
         CostChart.Invalidate();
     }
+
+    private async void OnSettingsClicked(object? sender, EventArgs e)
+    {
+        await Shell.Current.GoToAsync("//setup");
+    }
 }

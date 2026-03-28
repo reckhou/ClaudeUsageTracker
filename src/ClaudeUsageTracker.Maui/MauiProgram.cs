@@ -4,6 +4,7 @@ using ClaudeUsageTracker.Core.ViewModels;
 using ClaudeUsageTracker.Maui.Services;
 using ClaudeUsageTracker.Maui.Views;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ClaudeUsageTracker.Maui;
 
@@ -29,8 +30,13 @@ public static class MauiProgram
 			var path = Path.Combine(FileSystem.AppDataDirectory, "usage.db");
 			return new UsageDataService(path);
 		});
+		builder.Services.AddSingleton<IClaudeAiUsageService, ClaudeAiUsageService>();
 		builder.Services.AddTransient<SetupViewModel>();
-		builder.Services.AddTransient<DashboardViewModel>();
+		builder.Services.AddTransient<DashboardViewModel>(sp => new DashboardViewModel(
+			sp.GetRequiredService<ISecureStorageService>(),
+			sp.GetRequiredService<AnthropicApiService>(),
+			sp.GetRequiredService<IUsageDataService>(),
+			sp.GetRequiredService<IClaudeAiUsageService>()));
 		builder.Services.AddTransient<SetupPage>();
 		builder.Services.AddTransient<DashboardPage>();
 		builder.Services.AddTransient<MobileDashboardPage>();

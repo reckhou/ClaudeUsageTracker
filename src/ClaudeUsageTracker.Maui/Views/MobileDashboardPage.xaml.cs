@@ -18,4 +18,9 @@ public partial class MobileDashboardPage : ContentPage
         base.OnAppearing();
         _vm.RefreshCommand.Execute(null);
     }
+
+    private async void OnSettingsClicked(object? sender, EventArgs e)
+    {
+        await Shell.Current.GoToAsync("//setup");
+    }
 }

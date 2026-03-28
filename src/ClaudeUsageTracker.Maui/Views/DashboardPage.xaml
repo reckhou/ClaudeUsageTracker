@@ -5,18 +5,23 @@
              x:Class="ClaudeUsageTracker.Maui.Views.DashboardPage"
              Title="Claude Usage Tracker">
 
-    <Grid RowDefinitions="Auto,Auto,*,Auto" Padding="20" RowSpacing="16">
+    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" Padding="20" RowSpacing="16">
 
         <!-- Header -->
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto">
             <Label Text="Claude Usage Tracker" FontSize="22" FontAttributes="Bold" VerticalOptions="Center" />
-            <Button Grid.Column="1" Text="Refresh"
+            <Button Grid.Column="1" Text="Settings"
+                    Clicked="OnSettingsClicked"
+                    BackgroundColor="Transparent"
+                    TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}"
+                    Margin="0,0,8,0" />
+            <Button Grid.Column="2" Text="Refresh"
                     Command="{Binding RefreshCommand}"
                     IsEnabled="{Binding IsRefreshing, Converter={StaticResource InvertedBoolConverter}}" />
         </Grid>
 
-        <!-- Stats Cards -->
-        <Grid Grid.Row="1" ColumnDefinitions="*,*,*" ColumnSpacing="12">
+        <!-- Stats Cards — billing (Admin API) -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*" ColumnSpacing="12" IsVisible="{Binding HasAdminApiData}">
             <Frame Grid.Column="0" BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}" CornerRadius="8" Padding="16">
                 <VerticalStackLayout>
                     <Label Text="Today" FontSize="12" TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
@@ -25,11 +30,19 @@
             </Frame>
             <Frame Grid.Column="1" BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}" CornerRadius="8" Padding="16">
                 <VerticalStackLayout>
+                    <Label Text="This Week" FontSize="12" TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                    <Label Text="{Binding WeekCostUsd, StringFormat='{0:C}'}" FontSize="24" FontAttributes="Bold" />
+                    <Label Text="{Binding WeekTotalTokens, StringFormat='{0:N0} tok'}" FontSize="11"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                </VerticalStackLayout>
+            </Frame>
+            <Frame Grid.Column="2" BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}" CornerRadius="8" Padding="16">
+                <VerticalStackLayout>
                     <Label Text="This Month" FontSize="12" TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
                     <Label Text="{Binding MonthCostUsd, StringFormat='{0:C}'}" FontSize="24" FontAttributes="Bold" />
                 </VerticalStackLayout>
             </Frame>
-            <Frame Grid.Column="2" BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}" CornerRadius="8" Padding="16">
+            <Frame Grid.Column="3" BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}" CornerRadius="8" Padding="16">
                 <VerticalStackLayout>
                     <Label Text="Last Updated" FontSize="12" TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
                     <Label Text="{Binding LastUpdated}" FontSize="16" />
@@ -37,14 +50,45 @@
             </Frame>
         </Grid>
 
+        <!-- Quota Cards — Claude Pro -->
+        <Grid Grid.Row="2" ColumnDefinitions="*,*,Auto" ColumnSpacing="12" IsVisible="{Binding HasQuota}">
+            <Frame Grid.Column="0" CornerRadius="8" Padding="16"
+                   BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
+                <VerticalStackLayout>
+                    <Label Text="Current Session" FontSize="12"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                    <Label Text="{Binding SessionUtilization, StringFormat='{0}% used'}"
+                           FontSize="22" FontAttributes="Bold" />
+                    <Label Text="{Binding SessionResetsAt}" FontSize="11"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                </VerticalStackLayout>
+            </Frame>
+            <Frame Grid.Column="1" CornerRadius="8" Padding="16"
+                   BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
+                <VerticalStackLayout>
+                    <Label Text="Weekly Limit" FontSize="12"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                    <Label Text="{Binding WeeklyUtilization, StringFormat='{0}% used'}"
+                           FontSize="22" FontAttributes="Bold" />
+                    <Label Text="{Binding WeeklyResetsAt}" FontSize="11"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                </VerticalStackLayout>
+            </Frame>
+            <Button Grid.Column="2" Text="↻" FontSize="18" WidthRequest="48"
+                    Command="{Binding RefreshQuotaCommand}"
+                    BackgroundColor="Transparent"
+                    TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}"
+                    VerticalOptions="Center" />
+        </Grid>
+
         <!-- Bar Chart -->
-        <Grid Grid.Row="2" RowDefinitions="Auto,*">
+        <Grid Grid.Row="3" RowDefinitions="Auto,*">
             <Label Grid.Row="0" Text="Daily Cost — Last 30 Days" FontAttributes="Bold" Margin="0,0,0,8" />
             <GraphicsView Grid.Row="1" x:Name="CostChart" HeightRequest="200" />
         </Grid>
 
         <!-- Model Breakdown -->
-        <Grid Grid.Row="3" RowDefinitions="Auto,*" HeightRequest="200">
+        <Grid Grid.Row="4" RowDefinitions="Auto,*" HeightRequest="200">
             <Label Grid.Row="0" Text="Model Breakdown" FontAttributes="Bold" Margin="0,0,0,8" />
             <CollectionView Grid.Row="1" ItemsSource="{Binding ModelBreakdown}">
                 <CollectionView.ItemTemplate>
