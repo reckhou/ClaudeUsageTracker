@@ -20,6 +20,7 @@ public class UsageDataService(string dbPath) : IUsageDataService
             await _db.CreateTableAsync<UsageRecord>();
             await _db.CreateTableAsync<CostRecord>();
             await _db.CreateTableAsync<QuotaRecord>();
+            await _db.CreateTableAsync<ProviderUsageRecord>();
         }
         finally
         {
@@ -94,6 +95,19 @@ public class UsageDataService(string dbPath) : IUsageDataService
         return await _db!.Table<QuotaRecord>()
             .OrderByDescending(r => r.FetchedAt)
             .FirstOrDefaultAsync();
+    }
+
+    public async Task UpsertProviderRecordAsync(ProviderUsageRecord record)
+    {
+        EnsureInit();
+        await _db!.ExecuteAsync("DELETE FROM ProviderUsageRecords WHERE Provider = ?", record.Provider);
+        await _db.InsertAsync(record);
+    }
+
+    public async Task<List<ProviderUsageRecord>> GetAllProviderRecordsAsync()
+    {
+        EnsureInit();
+        return await _db!.Table<ProviderUsageRecord>().ToListAsync();
     }
 
     private void EnsureInit()

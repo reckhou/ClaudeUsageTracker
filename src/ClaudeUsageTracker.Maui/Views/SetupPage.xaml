@@ -66,6 +66,35 @@
           </VerticalStackLayout>
         </Frame>
 
+        <!-- MiniMaxi Card -->
+        <Frame CornerRadius="10" Padding="20"
+               BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
+          <VerticalStackLayout Spacing="12">
+            <Label Text="MiniMaxi" FontSize="16" FontAttributes="Bold" />
+            <Label Text="Tracks coding plan usage for your MiniMaxi account."
+                   FontSize="12" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+
+            <Grid IsVisible="{Binding IsMiniMaxiConnected, Converter={StaticResource InvertedBoolConverter}}"
+                  ColumnDefinitions="*,Auto" ColumnSpacing="8">
+              <Entry Grid.Column="0" Placeholder="Bearer token..." IsPassword="True"
+                     Text="{Binding MiniMaxiApiKey}" />
+              <Button Grid.Column="1" Text="Connect" Command="{Binding SaveMiniMaxiApiKeyCommand}"
+                      IsEnabled="{Binding IsValidatingMiniMaxi, Converter={StaticResource InvertedBoolConverter}}" />
+            </Grid>
+
+            <Grid IsVisible="{Binding IsMiniMaxiConnected}" ColumnDefinitions="*,Auto">
+              <Label Grid.Column="0" Text="✓ Connected" VerticalOptions="Center"
+                     TextColor="{StaticResource Primary}" />
+              <Button Grid.Column="1" Text="Disconnect" Command="{Binding DisconnectMiniMaxiCommand}"
+                      BackgroundColor="Transparent"
+                      TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
+                      FontSize="12" />
+            </Grid>
+
+            <ActivityIndicator IsRunning="{Binding IsValidatingMiniMaxi}" IsVisible="{Binding IsValidatingMiniMaxi}" />
+          </VerticalStackLayout>
+        </Frame>
+
         <Button Text="Go to Dashboard" Command="{Binding GoToDashboardCommand}"
                 HorizontalOptions="Fill" Margin="0,8,0,0" />
 

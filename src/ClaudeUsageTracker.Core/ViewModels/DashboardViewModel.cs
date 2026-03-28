@@ -178,6 +178,8 @@ public partial class DashboardViewModel(
 
     private static string FormatResetsAt(DateTime utc)
     {
+        // Guard against DateTime.MinValue (unset because API omitted resets_at)
+        if (utc == DateTime.MinValue) return "—";
         var diff = utc - DateTime.UtcNow;
         if (diff <= TimeSpan.Zero) return "Resetting\u2026";
         if (diff.TotalHours < 1) return $"Resets in {(int)diff.TotalMinutes} min";

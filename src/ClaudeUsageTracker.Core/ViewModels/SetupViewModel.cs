@@ -20,6 +20,11 @@ public partial class SetupViewModel(
     [ObservableProperty] private bool _isClaudeProConnected;
     [ObservableProperty] private string _claudeProStatus = "Not connected";
 
+    // MiniMaxi section
+    [ObservableProperty] private bool _isMiniMaxiConnected;
+    [ObservableProperty] private string _miniMaxiApiKey = "";
+    [ObservableProperty] private bool _isValidatingMiniMaxi;
+
     public event Action? NavigateToDashboard;
 
     public async Task LoadAsync()
@@ -31,6 +36,10 @@ public partial class SetupViewModel(
         var proConnected = await storage.GetAsync("claude_pro_connected");
         IsClaudeProConnected = proConnected == "true";
         ClaudeProStatus = IsClaudeProConnected ? "Connected" : "Not connected";
+
+        var miniKey = await storage.GetAsync("MiniMaxiApiKey");
+        IsMiniMaxiConnected = !string.IsNullOrEmpty(miniKey);
+        MiniMaxiApiKey = IsMiniMaxiConnected ? "••••••••••" : "";
     }
 
     [RelayCommand]
@@ -60,6 +69,25 @@ public partial class SetupViewModel(
         await storage.RemoveAsync("claude_pro_connected");
         IsClaudeProConnected = false;
         ClaudeProStatus = "Not connected";
+    }
+
+    [RelayCommand]
+    public async Task SaveMiniMaxiApiKeyAsync()
+    {
+        if (string.IsNullOrWhiteSpace(MiniMaxiApiKey) || MiniMaxiApiKey.StartsWith("•")) return;
+        IsValidatingMiniMaxi = true;
+        await storage.SetAsync("MiniMaxiApiKey", MiniMaxiApiKey);
+        IsMiniMaxiConnected = true;
+        MiniMaxiApiKey = "••••••••••";
+        IsValidatingMiniMaxi = false;
+    }
+
+    [RelayCommand]
+    public async Task DisconnectMiniMaxiAsync()
+    {
+        await storage.RemoveAsync("MiniMaxiApiKey");
+        IsMiniMaxiConnected = false;
+        MiniMaxiApiKey = "";
     }
 
     [RelayCommand]

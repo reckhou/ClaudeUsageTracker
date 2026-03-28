@@ -19,7 +19,7 @@
 - [x] Task 13: Revamp setup — dual independent optional sources
 - [x] Task 14: QuotaRecord model + storage + DashboardViewModel updates (weekly + quota)
 - [x] Task 15: MAUI Claude Pro WebView connection + dashboard quota cards
-- [ ] Task 16: Document claude.ai internal usage API
+- [x] Task 16: Document claude.ai internal usage API
 
 ---
 

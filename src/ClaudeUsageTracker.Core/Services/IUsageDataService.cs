@@ -12,4 +12,6 @@ public interface IUsageDataService
     Task<DateTime?> GetLastFetchedAtAsync();
     Task UpsertQuotaRecordAsync(QuotaRecord record);
     Task<QuotaRecord?> GetLatestQuotaAsync();
+    Task UpsertProviderRecordAsync(ProviderUsageRecord record);
+    Task<List<ProviderUsageRecord>> GetAllProviderRecordsAsync();
 }

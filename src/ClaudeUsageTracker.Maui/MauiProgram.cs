@@ -3,6 +3,7 @@ using ClaudeUsageTracker.Core.Services;
 using ClaudeUsageTracker.Core.ViewModels;
 using ClaudeUsageTracker.Maui.Services;
 using ClaudeUsageTracker.Maui.Views;
+using ClaudeUsageTracker.Maui.ViewModels;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -31,15 +32,23 @@ public static class MauiProgram
 			return new UsageDataService(path);
 		});
 		builder.Services.AddSingleton<IClaudeAiUsageService, ClaudeAiUsageService>();
+		builder.Services.AddSingleton<IUsageProvider, MiniMaxiUsageProvider>();
 		builder.Services.AddTransient<SetupViewModel>();
 		builder.Services.AddTransient<DashboardViewModel>(sp => new DashboardViewModel(
 			sp.GetRequiredService<ISecureStorageService>(),
 			sp.GetRequiredService<AnthropicApiService>(),
 			sp.GetRequiredService<IUsageDataService>(),
 			sp.GetRequiredService<IClaudeAiUsageService>()));
+		builder.Services.AddTransient<ProvidersDashboardViewModel>(sp =>
+			new ProvidersDashboardViewModel(
+				sp.GetRequiredService<IUsageDataService>() as UsageDataService
+					?? throw new InvalidOperationException("UsageDataService must be UsageDataService"),
+				sp.GetRequiredService<IEnumerable<IUsageProvider>>(),
+				sp.GetRequiredService<ISecureStorageService>()));
 		builder.Services.AddTransient<SetupPage>();
 		builder.Services.AddTransient<DashboardPage>();
 		builder.Services.AddTransient<MobileDashboardPage>();
+		builder.Services.AddTransient<ProvidersDashboardPage>();
 
 #if DEBUG
 		builder.Logging.AddDebug();

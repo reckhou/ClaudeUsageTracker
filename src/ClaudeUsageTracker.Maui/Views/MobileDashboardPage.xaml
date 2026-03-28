@@ -45,32 +45,6 @@
                 </VerticalStackLayout>
             </Frame>
 
-            <!-- Quota cards — Claude Pro -->
-            <Grid ColumnDefinitions="*,*" ColumnSpacing="12" IsVisible="{Binding HasQuota}">
-                <Frame Grid.Column="0" CornerRadius="12" Padding="16"
-                       BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
-                    <VerticalStackLayout>
-                        <Label Text="Current Session" FontSize="12"
-                               TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
-                        <Label Text="{Binding SessionUtilization, StringFormat='{0}% used'}"
-                               FontSize="20" FontAttributes="Bold" />
-                        <Label Text="{Binding SessionResetsAt}" FontSize="11"
-                               TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
-                    </VerticalStackLayout>
-                </Frame>
-                <Frame Grid.Column="1" CornerRadius="12" Padding="16"
-                       BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
-                    <VerticalStackLayout>
-                        <Label Text="Weekly Limit" FontSize="12"
-                               TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
-                        <Label Text="{Binding WeeklyUtilization, StringFormat='{0}% used'}"
-                               FontSize="20" FontAttributes="Bold" />
-                        <Label Text="{Binding WeeklyResetsAt}" FontSize="11"
-                               TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
-                    </VerticalStackLayout>
-                </Frame>
-            </Grid>
-
             <!-- Top model -->
             <Frame BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}" CornerRadius="12" Padding="20"
                    IsVisible="{Binding HasTopModel}">

@@ -11,5 +11,6 @@ public partial class AppShell : Shell
             Routing.RegisterRoute("dashboard", typeof(MobileDashboardPage));
         else
             Routing.RegisterRoute("dashboard", typeof(DashboardPage));
+        Routing.RegisterRoute("providers", typeof(ProvidersDashboardPage));
     }
 }
