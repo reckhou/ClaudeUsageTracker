@@ -1,4 +1,5 @@
 using Microsoft.Maui.Controls;
+using Microsoft.Maui.Graphics;
 
 namespace ClaudeUsageTracker.Maui.Controls;
 
@@ -8,11 +9,9 @@ public class ColorProgressBar : Microsoft.Maui.Controls.ProgressBar
         BindableProperty.Create(nameof(ProgressPercent), typeof(double), typeof(ColorProgressBar),
             0.0, propertyChanged: OnProgressPercentChanged);
 
-    public static readonly BindableProperty HighThresholdProperty =
-        BindableProperty.Create(nameof(HighThreshold), typeof(double), typeof(ColorProgressBar), 80.0);
-
-    public static readonly BindableProperty MediumThresholdProperty =
-        BindableProperty.Create(nameof(MediumThreshold), typeof(double), typeof(ColorProgressBar), 50.0);
+    public static readonly BindableProperty DisplayColorProperty =
+        BindableProperty.Create(nameof(DisplayColor), typeof(Color), typeof(ColorProgressBar),
+            Colors.Green, propertyChanged: OnDisplayColorChanged);
 
     public double ProgressPercent
     {
@@ -20,22 +19,17 @@ public class ColorProgressBar : Microsoft.Maui.Controls.ProgressBar
         set => SetValue(ProgressPercentProperty, value);
     }
 
-    public double HighThreshold
+    /// <summary>Bind this to TextColor on labels that should match the progress bar color.</summary>
+    public Color DisplayColor
     {
-        get => (double)GetValue(HighThresholdProperty);
-        set => SetValue(HighThresholdProperty, value);
-    }
-
-    public double MediumThreshold
-    {
-        get => (double)GetValue(MediumThresholdProperty);
-        set => SetValue(MediumThresholdProperty, value);
+        get => (Color)GetValue(DisplayColorProperty);
+        set => SetValue(DisplayColorProperty, value);
     }
 
     public ColorProgressBar()
     {
         HeightRequest = 8;
-        UpdateColor(ProgressPercent);
+        UpdateColor(0);
     }
 
     private static void OnProgressPercentChanged(BindableObject bindable, object oldValue, object newValue)
@@ -48,13 +42,44 @@ public class ColorProgressBar : Microsoft.Maui.Controls.ProgressBar
         }
     }
 
+    private static void OnDisplayColorChanged(BindableObject bindable, object oldValue, object newValue)
+    {
+        if (bindable is ColorProgressBar bar)
+            bar.ProgressColor = (Color)newValue;
+    }
+
     private void UpdateColor(double percent)
     {
-        if (percent >= HighThreshold)
-            ProgressColor = Color.FromArgb("#E53935"); // Red
-        else if (percent >= MediumThreshold)
-            ProgressColor = Color.FromArgb("#FB8C00"); // Orange/Yellow
+        // Smooth gradient: green (0%) → yellow (50%) → red (100%)
+        Color color;
+        if (percent <= 50)
+        {
+            // Green to yellow: interpolate R and G from 67,160,71 to 251,140,0
+            var t = percent / 50.0;
+            color = Interpolate(
+                Color.FromArgb("#43A047"),  // Green
+                Color.FromArgb("#FBBC05"),  // Yellow
+                t);
+        }
         else
-            ProgressColor = Color.FromArgb("#43A047"); // Green
+        {
+            // Yellow to red: interpolate R and G from 251,140,0 to 229,57,53
+            var t = (percent - 50) / 50.0;
+            color = Interpolate(
+                Color.FromArgb("#FBBC05"),  // Yellow
+                Color.FromArgb("#E53935"),  // Red
+                t);
+        }
+
+        ProgressColor = color;
+        SetValue(DisplayColorProperty, color);
+    }
+
+    private static Color Interpolate(Color from, Color to, double t)
+    {
+        var r = from.Red + (to.Red - from.Red) * t;
+        var g = from.Green + (to.Green - from.Green) * t;
+        var b = from.Blue + (to.Blue - from.Blue) * t;
+        return new Color((float)r, (float)g, (float)b);
     }
 }

@@ -64,11 +64,12 @@
                                                 </Label.FormattedText>
                                             </Label>
                                         </Grid>
-                                        <controls:ColorProgressBar ProgressPercent="{Binding IntervalUtilization}"
+                                        <controls:ColorProgressBar x:Name="IntervalProgressBar"
+                                                                         ProgressPercent="{Binding IntervalUtilization}"
                                                                          Margin="0,2,0,0" />
                                         <Grid ColumnDefinitions="*,Auto">
                                             <Label Grid.Column="0" FontSize="12"
-                                                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}">
+                                                   TextColor="{Binding Source={x:Reference IntervalProgressBar}, Path=DisplayColor}">
                                                 <Label.FormattedText>
                                                     <FormattedString>
                                                         <Span Text="{Binding IntervalUtilization, StringFormat='{0}%'}"/>
@@ -97,11 +98,12 @@
                                                 </Label.FormattedText>
                                             </Label>
                                         </Grid>
-                                        <controls:ColorProgressBar ProgressPercent="{Binding WeeklyUtilization}"
+                                        <controls:ColorProgressBar x:Name="WeeklyProgressBar"
+                                                                         ProgressPercent="{Binding WeeklyUtilization}"
                                                                          Margin="0,2,0,0" />
                                         <Grid ColumnDefinitions="*,Auto">
                                             <Label Grid.Column="0" FontSize="12"
-                                                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}">
+                                                   TextColor="{Binding Source={x:Reference WeeklyProgressBar}, Path=DisplayColor}">
                                                 <Label.FormattedText>
                                                     <FormattedString>
                                                         <Span Text="{Binding WeeklyUtilization, StringFormat='{0}%'}" />
