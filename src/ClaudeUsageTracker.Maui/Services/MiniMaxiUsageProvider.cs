@@ -48,11 +48,12 @@ public class MiniMaxiUsageProvider : IUsageProvider
             // Prefer MiniMax-M*, otherwise use first model
             if (name == "MiniMax-M*" || intervalUtil == null)
             {
+                // API's utilization field is the percentage REMAINING, not consumed
                 intervalUtil = model.TryGetProperty("utilization", out var u) && u.ValueKind == JsonValueKind.Number
-                    ? u.GetInt32() : (int)(iu * 100 / it);
+                    ? 100 - u.GetInt32() : (int)(iu * 100 / it);
                 weeklyUtil = wt > 0
                     ? (model.TryGetProperty("utilization", out var wu2) && wu2.ValueKind == JsonValueKind.Number
-                        ? wu2.GetInt32() : (int)(wu * 100 / wt))
+                        ? 100 - wu2.GetInt32() : (int)(wu * 100 / wt))
                     : 0;
                 intervalUsed = iu;
                 intervalTotal = it;
