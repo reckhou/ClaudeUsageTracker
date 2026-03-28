@@ -14,14 +14,26 @@ public partial class SetupPage : ContentPage
         vm.NavigateToDashboard += OnNavigateToDashboard;
     }
 
+    protected override async void OnAppearing()
+    {
+        base.OnAppearing();
+        await _vm.LoadAsync();
+    }
+
     private async void OnNavigateToDashboard()
     {
         _vm.NavigateToDashboard -= OnNavigateToDashboard;
         await Shell.Current.GoToAsync("//dashboard");
     }
 
-    private async void OnCopyErrorClicked(object? sender, EventArgs e)
+    private async void OnCopyApiErrorClicked(object? sender, EventArgs e)
     {
-        await Clipboard.Default.SetTextAsync(_vm.ErrorMessage);
+        await Clipboard.Default.SetTextAsync(_vm.ApiError);
+    }
+
+    // Full implementation added in Task 15 once IClaudeAiUsageService is registered
+    private void OnConnectClaudeProClicked(object sender, EventArgs e)
+    {
+        // Wired in Task 15
     }
 }

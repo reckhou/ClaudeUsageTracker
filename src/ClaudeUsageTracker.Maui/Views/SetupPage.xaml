@@ -5,51 +5,70 @@
              Title="Setup"
              BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Black}}">
 
-    <VerticalStackLayout Padding="40" Spacing="20" VerticalOptions="Center">
+    <ScrollView>
+      <VerticalStackLayout Padding="24" Spacing="20">
 
-        <Label Text="Claude Usage Tracker"
-               FontSize="28"
-               FontAttributes="Bold"
-               HorizontalOptions="Center" />
-
-        <Label Text="Enter your Anthropic Admin API key to get started."
-               HorizontalOptions="Center"
-               HorizontalTextAlignment="Center"
-               TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
-
-        <Label Text="The key must start with sk-ant-admin and requires Organization Admin role."
-               FontSize="12"
-               HorizontalOptions="Center"
-               HorizontalTextAlignment="Center"
+        <Label Text="Claude Usage Tracker" FontSize="26" FontAttributes="Bold" HorizontalOptions="Center" />
+        <Label Text="Connect one or both sources. Both are optional."
+               FontSize="13" HorizontalOptions="Center" HorizontalTextAlignment="Center"
                TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
 
-        <Entry x:Name="ApiKeyEntry"
-               Placeholder="sk-ant-admin..."
-               IsPassword="True"
-               Text="{Binding ApiKey}"
-               ReturnCommand="{Binding SaveCommand}" />
+        <!-- Admin API Card -->
+        <Frame CornerRadius="10" Padding="20"
+               BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
+          <VerticalStackLayout Spacing="12">
+            <Label Text="Anthropic Admin API" FontSize="16" FontAttributes="Bold" />
+            <Label Text="Tracks API billing costs and token usage across your organisation."
+                   FontSize="12" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
 
-        <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HasError}">
-            <Label Grid.Column="0"
-                   Text="{Binding ErrorMessage}"
-                   TextColor="Red" />
-            <Button Grid.Column="1"
-                    Text="Copy"
-                    FontSize="11"
-                    Padding="8,4"
-                    Clicked="OnCopyErrorClicked"
+            <Grid IsVisible="{Binding IsApiConnected, Converter={StaticResource InvertedBoolConverter}}"
+                  ColumnDefinitions="*,Auto" ColumnSpacing="8">
+              <Entry Grid.Column="0" Placeholder="sk-ant-admin..." IsPassword="True"
+                     Text="{Binding AdminApiKey}" ReturnCommand="{Binding SaveApiKeyCommand}" />
+              <Button Grid.Column="1" Text="Connect" Command="{Binding SaveApiKeyCommand}"
+                      IsEnabled="{Binding IsValidatingApi, Converter={StaticResource InvertedBoolConverter}}" />
+            </Grid>
+
+            <Grid IsVisible="{Binding IsApiConnected}" ColumnDefinitions="*,Auto">
+              <Label Grid.Column="0" Text="✓ Connected" VerticalOptions="Center"
+                     TextColor="{StaticResource Primary}" />
+              <Button Grid.Column="1" Text="Disconnect" Command="{Binding DisconnectApiCommand}"
+                      BackgroundColor="Transparent"
+                      TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
+                      FontSize="12" />
+            </Grid>
+
+            <Grid IsVisible="{Binding HasApiError}" ColumnDefinitions="*,Auto">
+              <Label Grid.Column="0" Text="{Binding ApiError}" TextColor="Red" FontSize="12" />
+              <Button Grid.Column="1" Text="Copy" FontSize="11" Padding="8,4"
+                      Clicked="OnCopyApiErrorClicked" BackgroundColor="Transparent" TextColor="Red" />
+            </Grid>
+            <ActivityIndicator IsRunning="{Binding IsValidatingApi}" IsVisible="{Binding IsValidatingApi}" />
+          </VerticalStackLayout>
+        </Frame>
+
+        <!-- Claude Pro Card -->
+        <Frame CornerRadius="10" Padding="20"
+               BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
+          <VerticalStackLayout Spacing="12">
+            <Label Text="Claude Pro Plan" FontSize="16" FontAttributes="Bold" />
+            <Label Text="Shows current session and weekly quota usage for your Claude.ai account."
+                   FontSize="12" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+            <Label Text="{Binding ClaudeProStatus}" FontSize="13" />
+            <Button x:Name="ConnectClaudeProButton" Text="Connect Claude Pro"
+                    Clicked="OnConnectClaudeProClicked"
+                    IsVisible="{Binding IsClaudeProConnected, Converter={StaticResource InvertedBoolConverter}}" />
+            <Button Text="Disconnect" Command="{Binding DisconnectClaudeProCommand}"
+                    IsVisible="{Binding IsClaudeProConnected}"
                     BackgroundColor="Transparent"
-                    TextColor="Red" />
-        </Grid>
+                    TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
+                    FontSize="12" />
+          </VerticalStackLayout>
+        </Frame>
 
-        <Button Text="Connect"
-                Command="{Binding SaveCommand}"
-                IsEnabled="{Binding IsValidating, Converter={StaticResource InvertedBoolConverter}}"
-                HorizontalOptions="Fill" />
+        <Button Text="Go to Dashboard" Command="{Binding GoToDashboardCommand}"
+                HorizontalOptions="Fill" Margin="0,8,0,0" />
 
-        <ActivityIndicator IsRunning="{Binding IsValidating}"
-                           IsVisible="{Binding IsValidating}"
-                           HorizontalOptions="Center" />
-
-    </VerticalStackLayout>
+      </VerticalStackLayout>
+    </ScrollView>
 </ContentPage>

@@ -26,7 +26,8 @@ public partial class App : Application
         try
         {
             var key = await _storage.GetAsync("admin_api_key");
-            if (!string.IsNullOrEmpty(key))
+            var pro = await _storage.GetAsync("claude_pro_connected");
+            if (!string.IsNullOrEmpty(key) || pro == "true")
                 await Shell.Current.GoToAsync("//dashboard");
         }
         catch { /* stay on setup page */ }
