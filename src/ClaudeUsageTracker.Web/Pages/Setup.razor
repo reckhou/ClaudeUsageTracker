@@ -1,0 +1,52 @@
+@page "/setup"
+@page "/"
+@using ClaudeUsageTracker.Core.ViewModels
+@inject SetupViewModel Vm
+@inject NavigationManager Nav
+
+<div class="container" style="max-width: 480px; margin-top: 80px;">
+    <h2 class="mb-4">Claude Usage Tracker</h2>
+    <p class="text-muted">Enter your Anthropic Admin API key to get started.</p>
+    <p class="text-muted small">The key must start with <code>sk-ant-admin</code> and requires Organization Admin role.</p>
+
+    <div class="mb-3">
+        <input type="password"
+               class="form-control"
+               placeholder="sk-ant-admin..."
+               @bind="Vm.ApiKey"
+               @onkeydown="OnKeyDown" />
+    </div>
+
+    @if (Vm.HasError)
+    {
+        <div class="alert alert-danger">@Vm.ErrorMessage</div>
+    }
+
+    <button class="btn btn-primary w-100"
+            disabled="@Vm.IsValidating"
+            @onclick="SaveAsync">
+        @if (Vm.IsValidating)
+        {
+            <span class="spinner-border spinner-border-sm me-2" />
+            <span>Validating...</span>
+        }
+        else
+        {
+            <span>Connect</span>
+        }
+    </button>
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Vm.NavigateToDashboard += () => Nav.NavigateTo("/dashboard");
+    }
+
+    private async Task SaveAsync() => await Vm.SaveCommand.ExecuteAsync(null);
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SaveAsync();
+    }
+}
