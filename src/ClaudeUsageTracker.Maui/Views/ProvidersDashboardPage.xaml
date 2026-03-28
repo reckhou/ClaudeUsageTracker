@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:ClaudeUsageTracker.Maui.ViewModels"
              x:Class="ClaudeUsageTracker.Maui.Views.ProvidersDashboardPage"
              Title="Providers">
 
@@ -15,24 +16,16 @@
         </Grid>
 
         <!-- Provider cards -->
-        <ScrollView Grid.Row="1">
+        <ScrollView Grid.Row="1"
+                    IsVisible="{Binding Providers.Count, Converter={StaticResource CountToBoolConverter}, ConverterParameter=inverse}">
             <VerticalStackLayout Spacing="12">
-                <VerticalStackLayout.Triggers>
-                    <DataTrigger TargetType="VerticalStackLayout" Binding="{Binding Providers.Count}" Value="0">
-                        <Setter Property="IsVisible" Value="False" />
-                    </DataTrigger>
-                </VerticalStackLayout.Triggers>
-
                 <CollectionView ItemsSource="{Binding Providers}">
                     <CollectionView.ItemTemplate>
                         <DataTemplate>
                             <Frame CornerRadius="10" Padding="20"
                                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
                                 <VerticalStackLayout Spacing="12">
-                                    <!-- Provider name -->
                                     <Label Text="{Binding ProviderName}" FontSize="18" FontAttributes="Bold" />
-
-                                    <!-- Interval + Weekly in a grid -->
                                     <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
                                         <VerticalStackLayout Grid.Column="0">
                                             <Label Text="Session" FontSize="12"
@@ -55,8 +48,6 @@
                                                    TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
                                         </VerticalStackLayout>
                                     </Grid>
-
-                                    <!-- Last updated -->
                                     <Label Text="{Binding LastUpdated, StringFormat='Updated {0}'}" FontSize="11"
                                            TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                                 </VerticalStackLayout>
@@ -68,24 +59,21 @@
         </ScrollView>
 
         <!-- Empty state -->
-        <VerticalStackLayout Grid.Row="1" VerticalOptions="Center" HorizontalOptions="Center">
-            <VerticalStackLayout.Triggers>
-                <DataTrigger TargetType="VerticalStackLayout" Binding="{Binding Providers.Count}" Value="0">
-                    <Setter Property="IsVisible" Value="True" />
-                </DataTrigger>
-            </VerticalStackLayout.Triggers>
+        <VerticalStackLayout Grid.Row="1" VerticalOptions="Center" HorizontalOptions="Center"
+                            IsVisible="{Binding Providers.Count, Converter={StaticResource CountToBoolConverter}}">
             <Label Text="No providers connected" FontSize="16" HorizontalOptions="Center"
                    TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
             <Label Text="Add API keys in Settings to see usage here" FontSize="13" HorizontalOptions="Center"
                    TextColor="{AppThemeBinding Light={StaticResource Gray400}, Dark={StaticResource Gray500}}" />
         </VerticalStackLayout>
 
-        <!-- Error -->
-        <Label Grid.Row="2" Text="{Binding ErrorMessage}" TextColor="Red" FontSize="12"
-               IsVisible="{Binding HasError}" />
-
-        <ActivityIndicator Grid.Row="2" IsRunning="{Binding IsRefreshing}" IsVisible="{Binding IsRefreshing}"
-                          HorizontalOptions="Center" />
+        <!-- Error + Activity -->
+        <VerticalStackLayout Grid.Row="2" Spacing="4">
+            <Label Text="{Binding ErrorMessage}" TextColor="Red" FontSize="12"
+                   IsVisible="{Binding HasError}" />
+            <ActivityIndicator IsRunning="{Binding IsRefreshing}" IsVisible="{Binding IsRefreshing}"
+                              HorizontalOptions="Center" />
+        </VerticalStackLayout>
 
     </Grid>
 </ContentPage>

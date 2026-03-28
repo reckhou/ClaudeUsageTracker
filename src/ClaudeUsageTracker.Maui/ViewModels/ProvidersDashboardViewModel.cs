@@ -79,6 +79,7 @@ public partial class ProvidersDashboardViewModel : ObservableObject
         return provider switch
         {
             "MiniMaxi" => await _storage.GetAsync("MiniMaxiApiKey"),
+            "Claude" => await _storage.GetAsync("claude_pro_connected"),
             _ => null
         };
     }

@@ -15,5 +15,6 @@ public partial class ProvidersDashboardPage : ContentPage
     {
         base.OnAppearing();
         await _vm.LoadAsync();
+        _vm.RefreshCommand.Execute(null);
     }
 }
