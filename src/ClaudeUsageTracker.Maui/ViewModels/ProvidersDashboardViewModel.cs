@@ -12,7 +12,6 @@ public partial class ProvidersDashboardViewModel : ObservableObject
     private readonly IEnumerable<IUsageProvider> _providers;
     private readonly ISecureStorageService _storage;
 
-    [ObservableProperty] private bool _isRefreshing;
     [ObservableProperty] private string _errorMessage = "";
     [ObservableProperty] private bool _hasError;
 
@@ -25,63 +24,27 @@ public partial class ProvidersDashboardViewModel : ObservableObject
         _storage = storage;
     }
 
-    [RelayCommand]
-    public async Task LoadAsync()
+    public async Task RefreshAllAsync()
     {
-        System.Diagnostics.Debug.WriteLine("[ProvidersVM] LoadAsync start");
-        await _db.InitAsync();
-        var records = await _db.GetAllProviderRecordsAsync();
-        System.Diagnostics.Debug.WriteLine($"[ProvidersVM] LoadAsync got {records.Count} records from DB");
-        var grouped = records
-            .GroupBy(r => r.Provider)
-            .Select(g => g.OrderByDescending(r => r.FetchedAt).First());
-        foreach (var record in grouped)
-            Providers.Add(ToCard(record));
-        System.Diagnostics.Debug.WriteLine($"[ProvidersVM] LoadAsync added {Providers.Count} providers to collection");
-    }
-
-    [RelayCommand]
-    public async Task RefreshAsync()
-    {
-        if (IsRefreshing) return;
-        IsRefreshing = true;
         HasError = false;
         ErrorMessage = "";
-        try
-        {
-            System.Diagnostics.Debug.WriteLine($"[ProvidersVM] RefreshAsync start. Providers count={Providers.Count}, _providers count={_providers.Count()}");
-            foreach (var provider in _providers)
-            {
-                var apiKey = await GetApiKeyForProvider(provider.ProviderName);
-                System.Diagnostics.Debug.WriteLine($"[ProvidersVM] Provider={provider.ProviderName}, apiKey={(apiKey == null ? "null" : apiKey.Length > 0 ? $"'{apiKey.Substring(0, Math.Min(apiKey.Length, 4))}...'" : "empty")}");
-                if (string.IsNullOrEmpty(apiKey)) continue;
+        var tasks = _providers.Select(p => RefreshProviderAsync(p)).ToList();
+        await Task.WhenAll(tasks);
+    }
 
-                System.Diagnostics.Debug.WriteLine($"[ProvidersVM] Fetching {provider.ProviderName}...");
-                var record = await provider.FetchAsync(apiKey);
-                System.Diagnostics.Debug.WriteLine($"[ProvidersVM] {provider.ProviderName} result: {(record == null ? "null" : $"Provider={record.Provider}, IU={record.IntervalUtilization}, WU={record.WeeklyUtilization}")}");
-                if (record == null) continue;
+    private async Task RefreshProviderAsync(IUsageProvider provider)
+    {
+        var apiKey = await GetApiKeyForProvider(provider.ProviderName);
+        if (string.IsNullOrEmpty(apiKey)) return;
 
-                await _db.UpsertProviderRecordAsync(record);
+        var card = Providers.FirstOrDefault(p => p.ProviderName == provider.ProviderName);
+        if (card == null)
+        {
+            card = new ProviderCardViewModel { ProviderName = provider.ProviderName };
+            Providers.Add(card);
+        }
 
-                var existing = Providers.FirstOrDefault(p => p.ProviderName == record.Provider);
-                if (existing != null)
-                    Providers[Providers.IndexOf(existing)] = ToCard(record);
-                else
-                    Providers.Add(ToCard(record));
-                System.Diagnostics.Debug.WriteLine($"[ProvidersVM] Added/updated {record.Provider}. Providers count now={Providers.Count}");
-            }
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[ProvidersVM] RefreshAsync exception: {ex}");
-            ErrorMessage = ex.Message;
-            HasError = true;
-        }
-        finally
-        {
-            IsRefreshing = false;
-            System.Diagnostics.Debug.WriteLine($"[ProvidersVM] RefreshAsync done. Providers count={Providers.Count}");
-        }
+        await card.RefreshAsync(provider, apiKey);
     }
 
     private async Task<string?> GetApiKeyForProvider(string provider)
@@ -93,20 +56,75 @@ public partial class ProvidersDashboardViewModel : ObservableObject
             _ => null
         };
     }
+}
 
-    private static ProviderCardViewModel ToCard(ProviderUsageRecord r) => new()
+public partial class ProviderCardViewModel : ObservableObject
+{
+    [ObservableProperty] private string _providerName = "";
+    [ObservableProperty] private int _intervalUtilization;
+    [ObservableProperty] private long _intervalUsed;
+    [ObservableProperty] private long _intervalTotal;
+    [ObservableProperty] private string _intervalResetsAt = "";
+    [ObservableProperty] private int _weeklyUtilization;
+    [ObservableProperty] private long _weeklyUsed;
+    [ObservableProperty] private long _weeklyTotal;
+    [ObservableProperty] private string _weeklyResetsAt = "";
+    [ObservableProperty] private string _lastUpdated = "";
+    [ObservableProperty] private bool _isRefreshing;
+    [ObservableProperty] private string _errorMessage = "";
+    [ObservableProperty] private bool _hasError;
+    [ObservableProperty] private bool _isConnected;
+
+    private IUsageProvider? _provider;
+    private string? _apiKey;
+
+    public async Task RefreshAsync(IUsageProvider provider, string apiKey)
     {
-        ProviderName = r.Provider,
-        IntervalUtilization = r.IntervalUtilization,
-        IntervalUsed = r.IntervalUsed,
-        IntervalTotal = r.IntervalTotal,
-        IntervalResetsAt = FormatResetsAt(r.IntervalResetsAt),
-        WeeklyUtilization = r.WeeklyUtilization,
-        WeeklyUsed = r.WeeklyUsed,
-        WeeklyTotal = r.WeeklyTotal,
-        WeeklyResetsAt = FormatResetsAt(r.WeeklyResetsAt),
-        LastUpdated = r.FetchedAt.ToLocalTime().ToString("h:mm tt")
-    };
+        if (IsRefreshing) return;
+        _provider = provider;
+        _apiKey = apiKey;
+        IsRefreshing = true;
+        HasError = false;
+        ErrorMessage = "";
+        try
+        {
+            var record = await provider.FetchAsync(apiKey);
+            if (record == null)
+            {
+                HasError = true;
+                ErrorMessage = "No data returned";
+                return;
+            }
+
+            ProviderName = record.Provider;
+            IntervalUtilization = record.IntervalUtilization;
+            IntervalUsed = record.IntervalUsed;
+            IntervalTotal = record.IntervalTotal;
+            IntervalResetsAt = FormatResetsAt(record.IntervalResetsAt);
+            WeeklyUtilization = record.WeeklyUtilization;
+            WeeklyUsed = record.WeeklyUsed;
+            WeeklyTotal = record.WeeklyTotal;
+            WeeklyResetsAt = FormatResetsAt(record.WeeklyResetsAt);
+            LastUpdated = record.FetchedAt.ToLocalTime().ToString("h:mm tt");
+            IsConnected = true;
+        }
+        catch (Exception ex)
+        {
+            HasError = true;
+            ErrorMessage = ex.Message;
+        }
+        finally
+        {
+            IsRefreshing = false;
+        }
+    }
+
+    [RelayCommand]
+    public async Task RefreshThisAsync()
+    {
+        if (_provider == null || _apiKey == null) return;
+        await RefreshAsync(_provider, _apiKey);
+    }
 
     private static string FormatResetsAt(DateTime utc)
     {
@@ -117,18 +135,4 @@ public partial class ProvidersDashboardViewModel : ObservableObject
         if (diff.TotalHours < 24) return $"Resets in {(int)diff.TotalHours} hr {diff.Minutes} min";
         return $"Resets {utc.ToLocalTime():ddd h:mm tt}";
     }
-}
-
-public partial class ProviderCardViewModel : ObservableObject
-{
-    public string ProviderName { get; set; } = "";
-    public int IntervalUtilization { get; set; }
-    public long IntervalUsed { get; set; }
-    public long IntervalTotal { get; set; }
-    public string IntervalResetsAt { get; set; } = "";
-    public int WeeklyUtilization { get; set; }
-    public long WeeklyUsed { get; set; }
-    public long WeeklyTotal { get; set; }
-    public string WeeklyResetsAt { get; set; } = "";
-    public string LastUpdated { get; set; } = "";
 }

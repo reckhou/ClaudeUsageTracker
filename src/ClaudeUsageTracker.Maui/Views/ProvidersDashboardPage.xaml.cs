@@ -14,7 +14,6 @@ public partial class ProvidersDashboardPage : ContentPage
     protected override async void OnAppearing()
     {
         base.OnAppearing();
-        await _vm.LoadAsync();
-        _vm.RefreshCommand.Execute(null);
+        await _vm.RefreshAllAsync();
     }
 }

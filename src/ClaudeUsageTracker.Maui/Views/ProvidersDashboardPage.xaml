@@ -2,54 +2,130 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:ClaudeUsageTracker.Maui.ViewModels"
+             xmlns:controls="clr-namespace:ClaudeUsageTracker.Maui.Controls"
              x:Class="ClaudeUsageTracker.Maui.Views.ProvidersDashboardPage"
              Title="Providers">
 
-    <Grid RowDefinitions="Auto,*,Auto" Padding="20" RowSpacing="16">
+    <Grid RowDefinitions="Auto,*" Padding="20" RowSpacing="16">
 
         <!-- Header -->
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
             <Label Text="Plan Usage" FontSize="22" FontAttributes="Bold" VerticalOptions="Center" />
-            <Button Grid.Column="1" Text="Refresh"
-                    Command="{Binding RefreshCommand}"
-                    IsEnabled="{Binding IsRefreshing, Converter={StaticResource InvertedBoolConverter}}" />
+            <Button Grid.Column="1" Text="Refresh All"
+                    Command="{Binding RefreshAllCommand}"
+                    FontSize="13" />
         </Grid>
 
-        <!-- Provider cards -->
-        <ScrollView Grid.Row="1"
-                    IsVisible="{Binding Providers.Count, Converter={StaticResource CountToBoolConverter}, ConverterParameter=inverse}">
+        <!-- Provider cards list -->
+        <ScrollView Grid.Row="1">
             <VerticalStackLayout Spacing="12">
-                <CollectionView ItemsSource="{Binding Providers}">
+
+                <!-- Empty state -->
+                <VerticalStackLayout IsVisible="{Binding Providers.Count, Converter={StaticResource CountToBoolConverter}}"
+                                    VerticalOptions="Center" HorizontalOptions="Center" Padding="0,40">
+                    <Label Text="No providers connected" FontSize="16" HorizontalOptions="Center"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                    <Label Text="Add API keys in Settings to see usage here" FontSize="13" HorizontalOptions="Center"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray400}, Dark={StaticResource Gray500}}" />
+                </VerticalStackLayout>
+
+                <!-- Provider cards -->
+                <CollectionView ItemsSource="{Binding Providers}"
+                                IsVisible="{Binding Providers.Count, Converter={StaticResource CountToBoolConverter}, ConverterParameter=inverse}">
                     <CollectionView.ItemTemplate>
                         <DataTemplate>
                             <Frame CornerRadius="10" Padding="20"
                                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
                                 <VerticalStackLayout Spacing="12">
-                                    <Label Text="{Binding ProviderName}" FontSize="18" FontAttributes="Bold" />
-                                    <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
-                                        <VerticalStackLayout Grid.Column="0">
-                                            <Label Text="Session" FontSize="12"
-                                                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
-                                            <Label Text="{Binding IntervalUtilization, StringFormat='{0}% used'}"
-                                                   FontSize="20" FontAttributes="Bold" />
-                                            <Label Text="{Binding IntervalUsed, StringFormat='{0:N0} / {1:N0}'}" FontSize="12"
-                                                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
-                                            <Label Text="{Binding IntervalResetsAt}" FontSize="11"
-                                                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
-                                        </VerticalStackLayout>
-                                        <VerticalStackLayout Grid.Column="1">
-                                            <Label Text="Weekly" FontSize="12"
-                                                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
-                                            <Label Text="{Binding WeeklyUtilization, StringFormat='{0}% used'}"
-                                                   FontSize="20" FontAttributes="Bold" />
-                                            <Label Text="{Binding WeeklyUsed, StringFormat='{0:N0} / {1:N0}'}" FontSize="12"
-                                                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
-                                            <Label Text="{Binding WeeklyResetsAt}" FontSize="11"
-                                                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
-                                        </VerticalStackLayout>
+
+                                    <!-- Card header -->
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <Label Grid.Column="0" Text="{Binding ProviderName}" FontSize="18" FontAttributes="Bold" />
+                                        <Button Grid.Column="1" Text="↻" FontSize="16"
+                                                Command="{Binding RefreshThisCommand}"
+                                                IsEnabled="{Binding IsRefreshing, Converter={StaticResource InvertedBoolConverter}}"
+                                                BackgroundColor="Transparent"
+                                                TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                                     </Grid>
-                                    <Label Text="{Binding LastUpdated, StringFormat='Updated {0}'}" FontSize="11"
+
+                                    <!-- Interval row -->
+                                    <VerticalStackLayout Spacing="4">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <Label Grid.Column="0" Text="Session" FontSize="12"
+                                                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                                            <Label Grid.Column="1" FontSize="12" VerticalOptions="Center">
+                                                <Label.FormattedText>
+                                                    <FormattedString>
+                                                        <Span Text="{Binding IntervalUsed, StringFormat='{0:N0}'}" FontAttributes="Bold" />
+                                                        <Span Text=" / " />
+                                                        <Span Text="{Binding IntervalTotal, StringFormat='{0:N0}'}" />
+                                                        <Span Text=" units" />
+                                                    </FormattedString>
+                                                </Label.FormattedText>
+                                            </Label>
+                                        </Grid>
+                                        <controls:ColorProgressBar ProgressPercent="{Binding IntervalUtilization}"
+                                                                         Margin="0,2,0,0" />
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <Label Grid.Column="0" FontSize="12"
+                                                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}">
+                                                <Label.FormattedText>
+                                                    <FormattedString>
+                                                        <Span Text="{Binding IntervalUtilization, StringFormat='{0}%'}"/>
+                                                        <Span Text=" used" />
+                                                    </FormattedString>
+                                                </Label.FormattedText>
+                                            </Label>
+                                            <Label Grid.Column="1" Text="{Binding IntervalResetsAt}" FontSize="11"
+                                                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                                        </Grid>
+                                    </VerticalStackLayout>
+
+                                    <!-- Weekly row -->
+                                    <VerticalStackLayout Spacing="4">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <Label Grid.Column="0" Text="Weekly" FontSize="12"
+                                                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                                            <Label Grid.Column="1" FontSize="12" VerticalOptions="Center">
+                                                <Label.FormattedText>
+                                                    <FormattedString>
+                                                        <Span Text="{Binding WeeklyUsed, StringFormat='{0:N0}'}" FontAttributes="Bold" />
+                                                        <Span Text=" / " />
+                                                        <Span Text="{Binding WeeklyTotal, StringFormat='{0:N0}'}" />
+                                                        <Span Text=" units" />
+                                                    </FormattedString>
+                                                </Label.FormattedText>
+                                            </Label>
+                                        </Grid>
+                                        <controls:ColorProgressBar ProgressPercent="{Binding WeeklyUtilization}"
+                                                                         Margin="0,2,0,0" />
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <Label Grid.Column="0" FontSize="12"
+                                                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}">
+                                                <Label.FormattedText>
+                                                    <FormattedString>
+                                                        <Span Text="{Binding WeeklyUtilization, StringFormat='{0}%'}" />
+                                                        <Span Text=" used" />
+                                                    </FormattedString>
+                                                </Label.FormattedText>
+                                            </Label>
+                                            <Label Grid.Column="1" Text="{Binding WeeklyResetsAt}" FontSize="11"
+                                                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                                        </Grid>
+                                    </VerticalStackLayout>
+
+                                    <!-- Error -->
+                                    <Label Text="{Binding ErrorMessage}" TextColor="Red" FontSize="11"
+                                           IsVisible="{Binding HasError}" />
+
+                                    <!-- Loading spinner per card -->
+                                    <ActivityIndicator IsRunning="{Binding IsRefreshing}" IsVisible="{Binding IsRefreshing}"
+                                                      HorizontalOptions="Center" />
+
+                                    <!-- Last updated -->
+                                    <Label Text="{Binding LastUpdated, StringFormat='Updated {0}'}" FontSize="10"
                                            TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+
                                 </VerticalStackLayout>
                             </Frame>
                         </DataTemplate>
@@ -57,23 +133,6 @@
                 </CollectionView>
             </VerticalStackLayout>
         </ScrollView>
-
-        <!-- Empty state -->
-        <VerticalStackLayout Grid.Row="1" VerticalOptions="Center" HorizontalOptions="Center"
-                            IsVisible="{Binding Providers.Count, Converter={StaticResource CountToBoolConverter}}">
-            <Label Text="No providers connected" FontSize="16" HorizontalOptions="Center"
-                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-            <Label Text="Add API keys in Settings to see usage here" FontSize="13" HorizontalOptions="Center"
-                   TextColor="{AppThemeBinding Light={StaticResource Gray400}, Dark={StaticResource Gray500}}" />
-        </VerticalStackLayout>
-
-        <!-- Error + Activity -->
-        <VerticalStackLayout Grid.Row="2" Spacing="4">
-            <Label Text="{Binding ErrorMessage}" TextColor="Red" FontSize="12"
-                   IsVisible="{Binding HasError}" />
-            <ActivityIndicator IsRunning="{Binding IsRefreshing}" IsVisible="{Binding IsRefreshing}"
-                              HorizontalOptions="Center" />
-        </VerticalStackLayout>
 
     </Grid>
 </ContentPage>

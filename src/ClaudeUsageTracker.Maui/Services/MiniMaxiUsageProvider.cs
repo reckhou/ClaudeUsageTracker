@@ -30,38 +30,38 @@ public class MiniMaxiUsageProvider : IUsageProvider
 
         var modelRemains = root.GetProperty("model_remains");
 
-        // Single pass: find MiniMax-M* data and track aggregates
-        long intervalUsed = 0, intervalTotal = 0;
-        long weeklyUsed = 0, weeklyTotal = 0;
-        DateTime? intervalReset = null;
-        DateTime? weeklyReset = null;
+        // Use MiniMax-M* (primary coding model) if available; fall back to first model with quota
+        int? intervalUtil = null, weeklyUtil = null;
+        long intervalUsed = 0, intervalTotal = 0, weeklyUsed = 0, weeklyTotal = 0;
+        DateTime? intervalReset = null, weeklyReset = null;
 
         foreach (var model in modelRemains.EnumerateArray())
         {
-            var iu = model.GetProperty("current_interval_usage_count").GetInt64();
             var it = model.GetProperty("current_interval_total_count").GetInt64();
+            if (it <= 0) continue;
+
+            var name = model.GetProperty("model_name").GetString();
+            var iu = model.GetProperty("current_interval_usage_count").GetInt64();
             var wu = model.GetProperty("current_weekly_usage_count").GetInt64();
             var wt = model.GetProperty("current_weekly_total_count").GetInt64();
 
-            var name = model.GetProperty("model_name").GetString();
-            if (name == "MiniMax-M*" && it > 0)
+            // Prefer MiniMax-M*, otherwise use first model
+            if (name == "MiniMax-M*" || intervalUtil == null)
             {
+                intervalUtil = model.TryGetProperty("utilization", out var u) && u.ValueKind == JsonValueKind.Number
+                    ? u.GetInt32() : (int)(iu * 100 / it);
+                weeklyUtil = wt > 0
+                    ? (model.TryGetProperty("utilization", out var wu2) && wu2.ValueKind == JsonValueKind.Number
+                        ? wu2.GetInt32() : (int)(wu * 100 / wt))
+                    : 0;
                 intervalUsed = iu;
                 intervalTotal = it;
                 weeklyUsed = wu;
                 weeklyTotal = wt;
                 intervalReset = UnixMsToDateTime(model.GetProperty("end_time").GetInt64());
                 weeklyReset = UnixMsToDateTime(model.GetProperty("weekly_end_time").GetInt64());
-            }
-            else if (it > 0 && intervalReset == null)
-            {
-                // Fall back to first model with quota
-                intervalUsed = iu;
-                intervalTotal = it;
-                weeklyUsed = wu;
-                weeklyTotal = wt;
-                intervalReset = UnixMsToDateTime(model.GetProperty("end_time").GetInt64());
-                weeklyReset = UnixMsToDateTime(model.GetProperty("weekly_end_time").GetInt64());
+
+                if (name == "MiniMax-M*") break; // Found preferred model
             }
         }
 
@@ -70,11 +70,11 @@ public class MiniMaxiUsageProvider : IUsageProvider
         return new ProviderUsageRecord
         {
             Provider = ProviderName,
-            IntervalUtilization = (int)(intervalUsed * 100 / intervalTotal),
+            IntervalUtilization = intervalUtil ?? 0,
             IntervalUsed = intervalUsed,
             IntervalTotal = intervalTotal,
             IntervalResetsAt = intervalReset ?? DateTime.UtcNow.AddHours(5),
-            WeeklyUtilization = weeklyTotal > 0 ? (int)(weeklyUsed * 100 / weeklyTotal) : 0,
+            WeeklyUtilization = weeklyUtil ?? 0,
             WeeklyUsed = weeklyUsed,
             WeeklyTotal = weeklyTotal,
             WeeklyResetsAt = weeklyReset ?? DateTime.UtcNow.AddDays(7),
