@@ -7,6 +7,9 @@ public partial class AppShell : Shell
     public AppShell()
     {
         InitializeComponent();
-        Routing.RegisterRoute("dashboard", typeof(DashboardPage));
+        if (DeviceInfo.Idiom == DeviceIdiom.Phone)
+            Routing.RegisterRoute("dashboard", typeof(MobileDashboardPage));
+        else
+            Routing.RegisterRoute("dashboard", typeof(DashboardPage));
     }
 }

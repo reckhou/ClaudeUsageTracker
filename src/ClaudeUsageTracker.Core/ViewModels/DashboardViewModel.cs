@@ -15,6 +15,8 @@ public partial class DashboardViewModel(
     [ObservableProperty] private long _todayTotalTokens;
     [ObservableProperty] private bool _isRefreshing;
     [ObservableProperty] private string _lastUpdated = "";
+    [ObservableProperty] private string _topModelName = "";
+    [ObservableProperty] private bool _hasTopModel;
 
     public ObservableCollection<DailyUsage> DailyUsages { get; } = new();
     public ObservableCollection<ModelUsage> ModelBreakdown { get; } = new();
@@ -99,6 +101,10 @@ public partial class DashboardViewModel(
             .OrderByDescending(m => m.Tokens)
             .ToList();
         foreach (var m in byModel) ModelBreakdown.Add(m);
+
+        var top = byModel.FirstOrDefault();
+        TopModelName = top?.Model ?? "";
+        HasTopModel = top != null;
 
         // Last updated
         var lastFetch = await db.GetLastFetchedAtAsync();
