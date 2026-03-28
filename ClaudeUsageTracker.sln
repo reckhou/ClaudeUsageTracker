@@ -9,8 +9,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ClaudeUsageTracker.Core", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ClaudeUsageTracker.Maui", "src\ClaudeUsageTracker.Maui\ClaudeUsageTracker.Maui.csproj", "{7465A321-CE1B-4781-8551-03DA5D72CB27}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ClaudeUsageTracker.Web", "src\ClaudeUsageTracker.Web\ClaudeUsageTracker.Web.csproj", "{A4830667-E6A0-4A6F-BBAE-639806A23439}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -45,18 +43,6 @@ Global
 		{7465A321-CE1B-4781-8551-03DA5D72CB27}.Release|x64.Build.0 = Release|Any CPU
 		{7465A321-CE1B-4781-8551-03DA5D72CB27}.Release|x86.ActiveCfg = Release|Any CPU
 		{7465A321-CE1B-4781-8551-03DA5D72CB27}.Release|x86.Build.0 = Release|Any CPU
-		{A4830667-E6A0-4A6F-BBAE-639806A23439}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{A4830667-E6A0-4A6F-BBAE-639806A23439}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{A4830667-E6A0-4A6F-BBAE-639806A23439}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{A4830667-E6A0-4A6F-BBAE-639806A23439}.Debug|x64.Build.0 = Debug|Any CPU
-		{A4830667-E6A0-4A6F-BBAE-639806A23439}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{A4830667-E6A0-4A6F-BBAE-639806A23439}.Debug|x86.Build.0 = Debug|Any CPU
-		{A4830667-E6A0-4A6F-BBAE-639806A23439}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{A4830667-E6A0-4A6F-BBAE-639806A23439}.Release|Any CPU.Build.0 = Release|Any CPU
-		{A4830667-E6A0-4A6F-BBAE-639806A23439}.Release|x64.ActiveCfg = Release|Any CPU
-		{A4830667-E6A0-4A6F-BBAE-639806A23439}.Release|x64.Build.0 = Release|Any CPU
-		{A4830667-E6A0-4A6F-BBAE-639806A23439}.Release|x86.ActiveCfg = Release|Any CPU
-		{A4830667-E6A0-4A6F-BBAE-639806A23439}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -64,6 +50,5 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{746CEF57-99B7-4031-A340-D847204DD4E1} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{7465A321-CE1B-4781-8551-03DA5D72CB27} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
-		{A4830667-E6A0-4A6F-BBAE-639806A23439} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal
