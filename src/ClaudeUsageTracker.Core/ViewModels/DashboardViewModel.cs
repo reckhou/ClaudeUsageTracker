@@ -26,6 +26,8 @@ public partial class DashboardViewModel(
     {
         if (IsRefreshing) return;
 
+        await db.InitAsync();
+
         // Respect 1-per-minute polling guideline
         var lastFetch = await db.GetLastFetchedAtAsync();
         if (lastFetch.HasValue && (DateTime.UtcNow - lastFetch.Value).TotalSeconds < 60)

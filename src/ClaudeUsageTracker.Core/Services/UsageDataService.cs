@@ -9,6 +9,7 @@ public class UsageDataService(string dbPath) : IUsageDataService
 
     public async Task InitAsync()
     {
+        if (_db != null) return;
         _db = new SQLiteAsyncConnection(dbPath);
         await _db.CreateTableAsync<UsageRecord>();
         await _db.CreateTableAsync<CostRecord>();
