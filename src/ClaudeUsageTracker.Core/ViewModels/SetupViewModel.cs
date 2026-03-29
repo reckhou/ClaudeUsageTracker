@@ -5,17 +5,8 @@ using ClaudeUsageTracker.Core.Services;
 namespace ClaudeUsageTracker.Core.ViewModels;
 
 public partial class SetupViewModel(
-    ISecureStorageService storage,
-    AnthropicApiService api,
-    IUsageDataService db) : ObservableObject
+    ISecureStorageService storage) : ObservableObject
 {
-    // Admin API section
-    [ObservableProperty] private string _adminApiKey = "";
-    [ObservableProperty] private bool _isValidatingApi;
-    [ObservableProperty] private string _apiError = "";
-    [ObservableProperty] private bool _hasApiError;
-    [ObservableProperty] private bool _isApiConnected;
-
     // Claude Pro section
     [ObservableProperty] private bool _isClaudeProConnected;
     [ObservableProperty] private string _claudeProStatus = "Not connected";
@@ -25,19 +16,10 @@ public partial class SetupViewModel(
     [ObservableProperty] private string _miniMaxiApiKey = "";
     [ObservableProperty] private bool _isValidatingMiniMaxi;
 
-    // Google AI section
-    [ObservableProperty] private bool _isGoogleAIConnected;
-    [ObservableProperty] private string _googleAIApiKey = "";
-    [ObservableProperty] private bool _isValidatingGoogleAI;
-
     public event Action? NavigateToDashboard;
 
     public async Task LoadAsync()
     {
-        var key = await storage.GetAsync("admin_api_key");
-        IsApiConnected = !string.IsNullOrEmpty(key);
-        AdminApiKey = IsApiConnected ? "••••••••••••" : "";
-
         var proConnected = await storage.GetAsync("claude_pro_connected");
         IsClaudeProConnected = proConnected == "true";
         ClaudeProStatus = IsClaudeProConnected ? "Connected" : "Not connected";
@@ -45,31 +27,6 @@ public partial class SetupViewModel(
         var miniKey = await storage.GetAsync("MiniMaxiApiKey");
         IsMiniMaxiConnected = !string.IsNullOrEmpty(miniKey);
         MiniMaxiApiKey = IsMiniMaxiConnected ? "••••••••••" : "";
-
-        var googleKey = await storage.GetAsync("GoogleAIApiKey");
-        IsGoogleAIConnected = !string.IsNullOrEmpty(googleKey);
-        GoogleAIApiKey = IsGoogleAIConnected ? "••••••••••" : "";
-    }
-
-    [RelayCommand]
-    public async Task SaveApiKeyAsync()
-    {
-        if (string.IsNullOrWhiteSpace(AdminApiKey) || AdminApiKey.StartsWith("•")) return;
-        IsValidatingApi = true; ApiError = ""; HasApiError = false;
-        var (valid, error) = await api.ValidateApiKeyAsync(AdminApiKey);
-        if (!valid) { ApiError = error ?? "Unknown error"; HasApiError = true; IsValidatingApi = false; return; }
-        await storage.SetAsync("admin_api_key", AdminApiKey);
-        await db.InitAsync();
-        IsApiConnected = true;
-        IsValidatingApi = false;
-    }
-
-    [RelayCommand]
-    public async Task DisconnectApiAsync()
-    {
-        await storage.RemoveAsync("admin_api_key");
-        IsApiConnected = false;
-        AdminApiKey = "";
     }
 
     [RelayCommand]
@@ -97,25 +54,6 @@ public partial class SetupViewModel(
         await storage.RemoveAsync("MiniMaxiApiKey");
         IsMiniMaxiConnected = false;
         MiniMaxiApiKey = "";
-    }
-
-    [RelayCommand]
-    public async Task SaveGoogleAIApiKeyAsync()
-    {
-        if (string.IsNullOrWhiteSpace(GoogleAIApiKey) || GoogleAIApiKey.StartsWith("•")) return;
-        IsValidatingGoogleAI = true;
-        await storage.SetAsync("GoogleAIApiKey", GoogleAIApiKey);
-        IsGoogleAIConnected = true;
-        GoogleAIApiKey = "••••••••••";
-        IsValidatingGoogleAI = false;
-    }
-
-    [RelayCommand]
-    public async Task DisconnectGoogleAIAsync()
-    {
-        await storage.RemoveAsync("GoogleAIApiKey");
-        IsGoogleAIConnected = false;
-        GoogleAIApiKey = "";
     }
 
     [RelayCommand]

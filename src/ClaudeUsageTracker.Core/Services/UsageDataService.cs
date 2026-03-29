@@ -1,4 +1,3 @@
-using System.Globalization;
 using ClaudeUsageTracker.Core.Models;
 using SQLite;
 
@@ -17,8 +16,6 @@ public class UsageDataService(string dbPath) : IUsageDataService
         {
             if (_db != null) return;
             _db = new SQLiteAsyncConnection(dbPath);
-            await _db.CreateTableAsync<UsageRecord>();
-            await _db.CreateTableAsync<CostRecord>();
             await _db.CreateTableAsync<QuotaRecord>();
             await _db.CreateTableAsync<ProviderUsageRecord>();
         }
@@ -26,60 +23,6 @@ public class UsageDataService(string dbPath) : IUsageDataService
         {
             _initLock.Release();
         }
-    }
-
-    public async Task UpsertUsageRecordsAsync(IEnumerable<UsageRecord> records)
-    {
-        EnsureInit();
-        foreach (var record in records)
-        {
-            await _db!.ExecuteAsync(
-                "DELETE FROM UsageRecords WHERE BucketStart = ? AND Model = ?",
-                record.BucketStart, record.Model);
-            await _db.InsertAsync(record);
-        }
-    }
-
-    public async Task UpsertCostRecordsAsync(IEnumerable<CostRecord> records)
-    {
-        EnsureInit();
-        foreach (var record in records)
-        {
-            await _db!.ExecuteAsync(
-                "DELETE FROM CostRecords WHERE BucketStart = ? AND Description = ?",
-                record.BucketStart, record.Description);
-            await _db.InsertAsync(record);
-        }
-    }
-
-    public async Task<List<UsageRecord>> GetUsageAsync(DateTime from, DateTime to)
-    {
-        EnsureInit();
-        return await _db!.Table<UsageRecord>()
-            .Where(r => r.BucketStart >= from && r.BucketStart <= to)
-            .ToListAsync();
-    }
-
-    public async Task<List<CostRecord>> GetCostsAsync(DateTime from, DateTime to)
-    {
-        EnsureInit();
-        return await _db!.Table<CostRecord>()
-            .Where(r => r.BucketStart >= from && r.BucketStart <= to)
-            .ToListAsync();
-    }
-
-    public async Task<DateTime?> GetLastFetchedAtAsync()
-    {
-        EnsureInit();
-        var result = await _db!.ExecuteScalarAsync<string>(
-            "SELECT MAX(FetchedAt) FROM UsageRecords");
-        if (string.IsNullOrEmpty(result)) return null;
-        if (long.TryParse(result, out var ticks))
-            return new DateTime(ticks, DateTimeKind.Utc);
-        if (DateTime.TryParse(result, CultureInfo.InvariantCulture,
-                DateTimeStyles.AssumeUniversal, out var dt))
-            return dt;
-        return null;
     }
 
     public async Task UpsertQuotaRecordAsync(QuotaRecord record)
