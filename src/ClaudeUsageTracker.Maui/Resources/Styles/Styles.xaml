@@ -43,10 +43,73 @@
                             <Setter Property="BackgroundColor" Value="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}" />
                         </VisualState.Setters>
                     </VisualState>
-                    <VisualState x:Name="PointerOver" />
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter Property="BackgroundColor"
+                                    Value="{AppThemeBinding Light={StaticResource Tertiary}, Dark={StaticResource SecondaryDarkText}}" />
+                            <Setter Property="Opacity" Value="0.92" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Pressed">
+                        <VisualState.Setters>
+                            <Setter Property="BackgroundColor"
+                                    Value="{AppThemeBinding Light={StaticResource Tertiary}, Dark={StaticResource SecondaryDarkText}}" />
+                            <Setter Property="Opacity" Value="0.75" />
+                            <Setter Property="Scale" Value="0.97" />
+                        </VisualState.Setters>
+                    </VisualState>
                 </VisualStateGroup>
             </VisualStateGroupList>
         </Setter>
+    </Style>
+
+    <!-- Time-range toggle button: unselected -->
+    <Style x:Key="TimeRangeButton" TargetType="Button">
+        <Setter Property="FontFamily" Value="OpenSansRegular" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Padding" Value="8,4" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="BorderWidth" Value="0" />
+        <Setter Property="MinimumHeightRequest" Value="32" />
+        <Setter Property="BackgroundColor"
+                Value="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}" />
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
+        <Setter Property="VisualStateManager.VisualStateGroups">
+            <VisualStateGroupList>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal" />
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Property="TextColor"
+                                    Value="{AppThemeBinding Light={StaticResource Gray300}, Dark={StaticResource Gray600}}" />
+                            <Setter Property="BackgroundColor"
+                                    Value="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter Property="BackgroundColor"
+                                    Value="{AppThemeBinding Light={StaticResource Gray300}, Dark={StaticResource Gray500}}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Pressed">
+                        <VisualState.Setters>
+                            <Setter Property="Opacity" Value="0.75" />
+                            <Setter Property="Scale" Value="0.97" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateGroupList>
+        </Setter>
+    </Style>
+
+    <!-- Time-range toggle button: selected -->
+    <Style x:Key="TimeRangeButtonSelected" TargetType="Button" BasedOn="{StaticResource TimeRangeButton}">
+        <Setter Property="BackgroundColor"
+                Value="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource PrimaryDarkText}}" />
     </Style>
 
     <Style TargetType="CheckBox">
