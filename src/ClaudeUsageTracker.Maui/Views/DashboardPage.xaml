@@ -3,14 +3,28 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:views="clr-namespace:ClaudeUsageTracker.Maui.Views"
              x:Class="ClaudeUsageTracker.Maui.Views.DashboardPage"
-             Title="{Binding PageTitle}">
+             Title="Usage Tracker">
 
     <Grid RowDefinitions="Auto,Auto,Auto,Auto" Padding="20" RowSpacing="16">
 
-        <!-- Header -->
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
-            <Label Text="{Binding PageTitle}" FontSize="22" FontAttributes="Bold" VerticalOptions="Center" />
-            <Grid Grid.Column="1" WidthRequest="44" HeightRequest="44">
+        <!-- Header: Provider picker left, refresh right -->
+        <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto">
+            <Picker Grid.Column="0"
+                    x:Name="ProviderPicker"
+                    Title="Provider"
+                    SelectedIndexChanged="OnProviderChanged"
+                    WidthRequest="150"
+                    VerticalOptions="Center">
+                <Picker.ItemsSource>
+                    <x:Array Type="{x:Type x:String}">
+                        <x:String>Anthropic</x:String>
+                        <x:String>MiniMaxi</x:String>
+                        <x:String>GoogleAI</x:String>
+                    </x:Array>
+                </Picker.ItemsSource>
+            </Picker>
+            <!-- col 1 spacer -->
+            <Grid Grid.Column="2" WidthRequest="44" HeightRequest="44">
                 <Button Text="↻" FontSize="18"
                         Command="{Binding RefreshCommand}"
                         IsVisible="{Binding IsRefreshing, Converter={StaticResource InvertedBoolConverter}}"
@@ -23,18 +37,18 @@
             </Grid>
         </Grid>
 
-        <!-- Stats Cards — billing (Admin API) -->
-        <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*" ColumnSpacing="12" IsVisible="{Binding HasAdminApiData}">
+        <!-- Stats Cards — always visible, show N/A when provider has no cost data -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*" ColumnSpacing="12">
             <Frame Grid.Column="0" BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}" CornerRadius="8" Padding="16">
                 <VerticalStackLayout>
                     <Label Text="Today" FontSize="12" TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
-                    <Label Text="{Binding TodayCostUsd, StringFormat='{0:C}'}" FontSize="24" FontAttributes="Bold" />
+                    <Label Text="{Binding TodayCostDisplay}" FontSize="24" FontAttributes="Bold" />
                 </VerticalStackLayout>
             </Frame>
             <Frame Grid.Column="1" BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}" CornerRadius="8" Padding="16">
                 <VerticalStackLayout>
                     <Label Text="This Week" FontSize="12" TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
-                    <Label Text="{Binding WeekCostUsd, StringFormat='{0:C}'}" FontSize="24" FontAttributes="Bold" />
+                    <Label Text="{Binding WeekCostDisplay}" FontSize="24" FontAttributes="Bold" />
                     <Label Text="{Binding WeekTotalTokens, StringFormat='{0:N0} tok'}" FontSize="11"
                            TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
                 </VerticalStackLayout>
@@ -42,7 +56,7 @@
             <Frame Grid.Column="2" BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}" CornerRadius="8" Padding="16">
                 <VerticalStackLayout>
                     <Label Text="This Month" FontSize="12" TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
-                    <Label Text="{Binding MonthCostUsd, StringFormat='{0:C}'}" FontSize="24" FontAttributes="Bold" />
+                    <Label Text="{Binding MonthCostDisplay}" FontSize="24" FontAttributes="Bold" />
                 </VerticalStackLayout>
             </Frame>
             <Frame Grid.Column="3" BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}" CornerRadius="8" Padding="16">
@@ -61,21 +75,8 @@
 
         <!-- Token Usage Chart -->
         <Grid Grid.Row="3" RowDefinitions="Auto,Auto,Auto,*">
-            <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+            <Grid Grid.Row="0" ColumnDefinitions="*" Margin="0,0,0,8">
                 <Label Text="Token Usage" FontAttributes="Bold" VerticalOptions="Center" />
-                <Picker Grid.Column="1"
-                        x:Name="ProviderPicker"
-                        Title="Provider"
-                        SelectedIndexChanged="OnProviderChanged"
-                        WidthRequest="140">
-                    <Picker.ItemsSource>
-                        <x:Array Type="{x:Type x:String}">
-                            <x:String>Anthropic</x:String>
-                            <x:String>MiniMaxi</x:String>
-                            <x:String>GoogleAI</x:String>
-                        </x:Array>
-                    </Picker.ItemsSource>
-                </Picker>
             </Grid>
 
             <StackLayout Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">

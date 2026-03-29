@@ -55,12 +55,23 @@ public partial class DashboardViewModel(
     public bool IsTimeRange7d  => SelectedTimeRange == TokenTimeRange.Past7Days;
     public bool IsTimeRange30d => SelectedTimeRange == TokenTimeRange.Past30Days;
 
+    // Shows "N/A" when current provider has no Admin API cost data
+    private bool IsAdminApiAvailableForProvider =>
+        HasAdminApiData && SelectedProvider == ProviderFilter.Anthropic;
+
+    public string TodayCostDisplay  => IsAdminApiAvailableForProvider ? TodayCostUsd.ToString("C")  : "N/A";
+    public string WeekCostDisplay   => IsAdminApiAvailableForProvider ? WeekCostUsd.ToString("C")   : "N/A";
+    public string MonthCostDisplay  => IsAdminApiAvailableForProvider ? MonthCostUsd.ToString("C")  : "N/A";
+
     public string? CostUnavailableMessage { get; private set; }
     public string? TokenUnavailableMessage { get; private set; }
 
     partial void OnSelectedProviderChanged(ProviderFilter value)
     {
         OnPropertyChanged(nameof(PageTitle));
+        OnPropertyChanged(nameof(TodayCostDisplay));
+        OnPropertyChanged(nameof(WeekCostDisplay));
+        OnPropertyChanged(nameof(MonthCostDisplay));
         _ = LoadFromDbAsync();
     }
 
@@ -176,6 +187,9 @@ public partial class DashboardViewModel(
         WeekTotalTokens = usageRecords.Where(r => r.BucketStart.Date >= weekStart)
             .Sum(r => r.InputTokens + r.OutputTokens + r.CacheReadTokens + r.CacheCreationTokens);
         HasAdminApiData = costRecords.Any();
+        OnPropertyChanged(nameof(TodayCostDisplay));
+        OnPropertyChanged(nameof(WeekCostDisplay));
+        OnPropertyChanged(nameof(MonthCostDisplay));
 
         // Daily usage for chart (last 30 days) — only Anthropic has historical cost data
         DailyUsages.Clear();
@@ -194,7 +208,7 @@ public partial class DashboardViewModel(
         else
         {
             var providerDisplayName = PageTitle.Replace(" Usage Tracker", "");
-            CostUnavailableMessage = $"Daily cost history is not available for {providerDisplayName}";
+            CostUnavailableMessage = $"{providerDisplayName} provides quota units, not USD cost history";
         }
         OnPropertyChanged(nameof(CostUnavailableMessage));
 
@@ -243,31 +257,50 @@ public partial class DashboardViewModel(
 
         if (SelectedProvider == ProviderFilter.Anthropic)
         {
-            var today = DateTime.UtcNow.Date;
+            var now = DateTime.UtcNow;
             var from = SelectedTimeRange switch
             {
-                TokenTimeRange.Past24Hours => today.AddHours(-24),
-                TokenTimeRange.Past7Days => today.AddDays(-7),
-                TokenTimeRange.Past30Days => today.AddDays(-30),
-                _ => today.AddHours(-24)
+                TokenTimeRange.Past24Hours => now.AddHours(-23),
+                TokenTimeRange.Past7Days   => now.AddHours(-167),
+                TokenTimeRange.Past30Days  => now.Date.AddDays(-29),
+                _                          => now.AddHours(-23)
             };
 
-            var records = await db.GetUsageAsync(from, DateTime.UtcNow);
+            var records = await db.GetUsageAsync(from, now.AddHours(1));
 
-            IEnumerable<IGrouping<DateTime, UsageRecord>> grouped;
-            if (SelectedTimeRange == TokenTimeRange.Past24Hours)
+            if (SelectedTimeRange == TokenTimeRange.Past24Hours || SelectedTimeRange == TokenTimeRange.Past7Days)
             {
-                grouped = records.GroupBy(r => r.BucketStart.Date.AddHours(r.BucketStart.Hour)).OrderBy(g => g.Key);
+                // Hourly slots: 24 slots for 24h, 168 slots for 7d
+                int slots = SelectedTimeRange == TokenTimeRange.Past24Hours ? 24 : 168;
+                var startHour = new DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0, DateTimeKind.Utc)
+                    .AddHours(-(slots - 1));
+                var byHour = records
+                    .GroupBy(r => new DateTime(r.BucketStart.Year, r.BucketStart.Month, r.BucketStart.Day,
+                                               r.BucketStart.Hour, 0, 0, DateTimeKind.Utc))
+                    .ToDictionary(g => g.Key, g => g.Sum(r => r.InputTokens + r.OutputTokens));
+                for (int i = 0; i < slots; i++)
+                {
+                    var slot = startHour.AddHours(i);
+                    byHour.TryGetValue(slot, out long tokens);
+                    TokenChartData.Add(new TokenUsage(slot, tokens));
+                }
             }
             else
             {
-                grouped = records.GroupBy(r => r.BucketStart.Date).OrderBy(g => g.Key);
+                // Daily slots: 30 days
+                var today = now.Date;
+                var byDay = records
+                    .GroupBy(r => r.BucketStart.Date)
+                    .ToDictionary(g => g.Key, g => g.Sum(r => r.InputTokens + r.OutputTokens));
+                for (int i = 29; i >= 0; i--)
+                {
+                    var date = today.AddDays(-i);
+                    byDay.TryGetValue(date, out long tokens);
+                    TokenChartData.Add(new TokenUsage(date, tokens));
+                }
             }
 
-            foreach (var g in grouped)
-                TokenChartData.Add(new TokenUsage(g.Key, g.Sum(r => r.InputTokens + r.OutputTokens)));
-
-            TokenUnavailableMessage = TokenChartData.Count == 0
+            TokenUnavailableMessage = records.Count == 0
                 ? "No token data — add an Admin API key in Settings"
                 : null;
         }

@@ -69,16 +69,17 @@ public class CostBarChartDrawable(
             canvas.FillColor = Color.FromArgb("#512BD4");
             if (barH > 0) canvas.FillRectangle(x, y, barWidth, barH);
 
-            // Value label — above bar if short, inside if tall
-            if (data[i].CostUsd > 0)
+            // Value label — only on bars wide enough to show text legibly
+            if (data[i].CostUsd > 0 && barWidth >= 22)
             {
                 string valLabel = data[i].CostUsd < 0.001m ? "<$0.001"
                     : data[i].CostUsd < 0.01m ? $"${data[i].CostUsd:F3}"
                     : $"${data[i].CostUsd:F2}";
-                canvas.FontColor = Color.FromArgb("#512BD4");
-                canvas.FontSize  = 8;
-                float labelY = barH >= 16 ? y + 2 : y - 11;
-                canvas.DrawString(valLabel, x, labelY, barWidth, 10,
+                bool insideBar  = barH >= 14;
+                canvas.FontColor = insideBar ? Colors.White : Color.FromArgb("#512BD4");
+                canvas.FontSize  = 10;
+                float labelY = insideBar ? y + 2 : y - 13;
+                canvas.DrawString(valLabel, x, labelY, barWidth, 12,
                     HorizontalAlignment.Center, VerticalAlignment.Top);
             }
 

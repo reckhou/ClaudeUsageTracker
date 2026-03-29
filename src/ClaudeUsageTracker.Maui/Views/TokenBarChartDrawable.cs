@@ -70,33 +70,45 @@ public class TokenBarChartDrawable(
             canvas.FillColor = Color.FromArgb("#34C759");
             if (barH > 0) canvas.FillRectangle(x, y, barWidth, barH);
 
-            // Value label — above bar if short, inside if tall
-            if (data[i].Tokens > 0)
+            // Value label — only on bars wide enough to show text legibly
+            if (data[i].Tokens > 0 && barWidth >= 22)
             {
-                string valLabel = FormatTokens(data[i].Tokens);
-                canvas.FontColor = Color.FromArgb("#2A9E47");
-                canvas.FontSize  = 8;
-                float labelY = barH >= 16 ? y + 2 : y - 11;
-                canvas.DrawString(valLabel, x, labelY, barWidth, 10,
+                string valLabel  = FormatTokens(data[i].Tokens);
+                bool insideBar   = barH >= 14;
+                canvas.FontColor = insideBar ? Colors.White : Color.FromArgb("#2A9E47");
+                canvas.FontSize  = 10;
+                float labelY = insideBar ? y + 2 : y - 13;
+                canvas.DrawString(valLabel, x, labelY, barWidth, 12,
                     HorizontalAlignment.Center, VerticalAlignment.Top);
             }
 
-            // X-axis labels
-            bool isHourly  = data.Count > 7;
-            bool showLabel = data.Count <= 7
-                || (isHourly && data.Count <= 24 && i % 3 == 0)
-                || (!isHourly && i % 5 == 0)
-                || i == data.Count - 1;
+            // X-axis labels:
+            //   24 bars  → every 3rd hour
+            //   168 bars → every 24th slot (= once per day, label with day name)
+            //   30 bars  → every 5th day
+            bool showLabel;
+            string xLabel;
+            if (data.Count <= 24)
+            {
+                showLabel = i % 3 == 0 || i == data.Count - 1;
+                xLabel    = data[i].Date.ToLocalTime().ToString("htt").ToLower();
+            }
+            else if (data.Count <= 168)
+            {
+                showLabel = i % 24 == 0 || i == data.Count - 1;
+                xLabel    = data[i].Date.ToLocalTime().ToString("ddd");
+            }
+            else
+            {
+                showLabel = i % 5 == 0 || i == data.Count - 1;
+                xLabel    = data[i].Date.ToLocalTime().ToString("M/d");
+            }
+
             if (showLabel)
             {
                 canvas.FontColor = Color.FromArgb("#6E6E6E");
                 canvas.FontSize  = 9;
-                string dateLabel = data.Count <= 24
-                    ? data[i].Date.ToLocalTime().ToString("htt").ToLower()
-                    : data.Count <= 7
-                        ? data[i].Date.ToLocalTime().ToString("ddd")
-                        : data[i].Date.ToLocalTime().ToString("M/d");
-                canvas.DrawString(dateLabel, x, h - BottomPad + 4, barWidth, BottomPad - 4,
+                canvas.DrawString(xLabel, x, h - BottomPad + 4, barWidth, BottomPad - 4,
                     HorizontalAlignment.Center, VerticalAlignment.Top);
             }
         }
