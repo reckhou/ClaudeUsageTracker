@@ -10,7 +10,7 @@
 
 ## Progress
 
-- [ ] Task 1: MiniModePage + MiniModeViewModel + MiniModeWindowService
+- [x] Task 1: MiniModePage + MiniModeViewModel + MiniModeWindowService
 - [ ] Task 2: Launch button + DI wiring
 
 ---

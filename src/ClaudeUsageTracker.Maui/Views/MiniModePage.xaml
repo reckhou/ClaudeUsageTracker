@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:ClaudeUsageTracker.Maui.ViewModels"
+             xmlns:controls="clr-namespace:ClaudeUsageTracker.Maui.Controls"
+             x:Class="ClaudeUsageTracker.Maui.Views.MiniModePage"
+             BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Black}}">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="14,10" Spacing="0">
+
+            <!-- Empty state -->
+            <Label Text="No providers — use Refresh All in main window"
+                   FontSize="13" HorizontalOptions="Center" Margin="0,16"
+                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
+                   IsVisible="{Binding Dashboard.Providers.Count, Converter={StaticResource CountToBoolConverter}}" />
+
+            <!-- Provider rows -->
+            <CollectionView ItemsSource="{Binding Dashboard.Providers}"
+                            IsVisible="{Binding Dashboard.Providers.Count, Converter={StaticResource CountToBoolConverter}, ConverterParameter=inverse}">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ProviderCardViewModel">
+                        <VerticalStackLayout Spacing="6" Padding="0,8,0,8">
+
+                            <!-- Provider name + spinner -->
+                            <Grid ColumnDefinitions="*,Auto">
+                                <Label Grid.Column="0"
+                                       Text="{Binding ProviderName}"
+                                       FontSize="15" FontAttributes="Bold"
+                                       VerticalOptions="Center" />
+                                <ActivityIndicator Grid.Column="1"
+                                                   IsRunning="{Binding IsRefreshing}"
+                                                   IsVisible="{Binding IsRefreshing}"
+                                                   WidthRequest="16" HeightRequest="16" />
+                            </Grid>
+
+                            <!-- Session row -->
+                            <Grid ColumnDefinitions="56,*,50" ColumnSpacing="8" VerticalOptions="Center">
+                                <Label Grid.Column="0" Text="Session" FontSize="13"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}"
+                                       VerticalOptions="Center" />
+                                <controls:ColorProgressBar Grid.Column="1"
+                                                           ProgressPercent="{Binding IntervalUtilization}"
+                                                           HeightRequest="12" />
+                                <Label Grid.Column="2"
+                                       Text="{Binding IntervalUtilization, StringFormat='{0}%'}"
+                                       FontSize="13" FontAttributes="Bold"
+                                       HorizontalTextAlignment="End" VerticalOptions="Center" />
+                            </Grid>
+
+                            <!-- Weekly row -->
+                            <Grid ColumnDefinitions="56,*,50" ColumnSpacing="8" VerticalOptions="Center">
+                                <Label Grid.Column="0" Text="Weekly" FontSize="13"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}"
+                                       VerticalOptions="Center" />
+                                <controls:ColorProgressBar Grid.Column="1"
+                                                           ProgressPercent="{Binding WeeklyUtilization}"
+                                                           HeightRequest="12" />
+                                <Label Grid.Column="2"
+                                       Text="{Binding WeeklyUtilization, StringFormat='{0}%'}"
+                                       FontSize="13" FontAttributes="Bold"
+                                       HorizontalTextAlignment="End" VerticalOptions="Center" />
+                            </Grid>
+
+                            <!-- Resets-at hint -->
+                            <Label Text="{Binding IntervalResetsAt}" FontSize="11"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
+                                   HorizontalOptions="End" />
+
+                            <!-- Divider -->
+                            <BoxView HeightRequest="1" Margin="0,4,0,0"
+                                     Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
+
+                        </VerticalStackLayout>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+
+            <!-- Settings toggle button -->
+            <Button x:Name="SettingsToggleButton"
+                    Text="⚙ Settings ▼"
+                    Clicked="OnSettingsToggleClicked"
+                    FontSize="12"
+                    BackgroundColor="Transparent"
+                    TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
+                    HorizontalOptions="Start"
+                    Margin="0,6,0,0" />
+
+            <!-- Settings panel (foldable) -->
+            <VerticalStackLayout IsVisible="{Binding IsSettingsExpanded}"
+                                 Spacing="12" Padding="0,10,0,6">
+
+                <BoxView HeightRequest="1"
+                         Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
+
+                <!-- Opacity / Transparency -->
+                <Grid ColumnDefinitions="110,*,44" ColumnSpacing="10" VerticalOptions="Center">
+                    <Label Grid.Column="0" Text="Transparency" FontSize="13" VerticalOptions="Center" />
+                    <Slider Grid.Column="1"
+                            Minimum="0.3" Maximum="1.0"
+                            Value="{Binding Opacity}"
+                            VerticalOptions="Center" />
+                    <Label Grid.Column="2"
+                           Text="{Binding OpacityPercent}"
+                           FontSize="13" HorizontalTextAlignment="End" VerticalOptions="Center" />
+                </Grid>
+
+                <!-- Always on Top -->
+                <Grid ColumnDefinitions="*,Auto" VerticalOptions="Center">
+                    <Label Grid.Column="0" Text="Always on Top" FontSize="13" VerticalOptions="Center" />
+                    <Switch Grid.Column="1" IsToggled="{Binding IsAlwaysOnTop}" VerticalOptions="Center" />
+                </Grid>
+
+                <!-- Auto Refresh status (display only — driven by Start/Stop below) -->
+                <Grid ColumnDefinitions="*,Auto" VerticalOptions="Center">
+                    <Label Grid.Column="0" Text="Auto Refresh" FontSize="13" VerticalOptions="Center" />
+                    <Switch Grid.Column="1"
+                            IsToggled="{Binding Dashboard.IsAutoRefreshRunning}"
+                            IsEnabled="False"
+                            VerticalOptions="Center" />
+                </Grid>
+
+                <!-- Auto Refresh interval + start/stop button -->
+                <Grid ColumnDefinitions="Auto,60,Auto,*" ColumnSpacing="8" VerticalOptions="Center">
+                    <Label Grid.Column="0" Text="Every" FontSize="13" VerticalOptions="Center" />
+                    <Entry Grid.Column="1"
+                           Text="{Binding Dashboard.AutoRefreshMinutes}"
+                           Keyboard="Numeric" FontSize="13"
+                           HorizontalTextAlignment="Center" VerticalOptions="Center"
+                           IsEnabled="{Binding Dashboard.IsAutoRefreshRunning, Converter={StaticResource InvertedBoolConverter}}" />
+                    <Label Grid.Column="2" Text="min" FontSize="13" VerticalOptions="Center" />
+                    <Button Grid.Column="3"
+                            Text="{Binding Dashboard.AutoRefreshToggleText}"
+                            Command="{Binding Dashboard.ToggleAutoRefreshCommand}"
+                            FontSize="13" HorizontalOptions="Start" />
+                </Grid>
+
+            </VerticalStackLayout>
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>
