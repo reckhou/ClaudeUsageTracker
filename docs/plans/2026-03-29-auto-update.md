@@ -2,7 +2,7 @@
 
 **Goal:** Add GitHub-release-based auto-update so the app silently checks for new versions on startup and lets users apply them with one click.
 
-**Architecture:** Three layers work together. `UpdateService` (Core, Singleton) owns all update state — it polls the GitHub releases API on startup and every 5 minutes, holds `IsUpdateAvailable`/`IsUpdating`/`UpdateProgress`, and handles download+verify+self-replace via a PowerShell helper script. `DashboardViewModel` exposes `UpdateService` directly as a bindable property so `DashboardPage.xaml` can bind to it without forwarding every property. Because `UpdateService` is a Singleton and `DashboardViewModel` is Transient, the update state survives ViewModel recreation across page navigations. The `release.ps1` script gains SHA256 generation so the app can verify integrity before applying.
+**Architecture:** `UpdateService` (Core, Singleton) owns all update state — polls the GitHub releases API on startup and every 5 minutes, holds `IsUpdateAvailable`/`IsUpdating`/`UpdateProgress`, and handles download+SHA256 verify+self-replace via a PowerShell helper script. A `Action? quitApp` callback is injected at registration time (in MauiProgram.cs) so Core stays free of MAUI API dependencies. `ProvidersDashboardViewModel` (MAUI Singleton) receives `IUpdateService` via constructor and exposes it as a bindable property so `ProvidersDashboardPage.xaml` can bind directly. Because both the ViewModel and the service are Singletons, update state persists for the entire app lifetime. The `release.ps1` script gains SHA256 sidecar file generation so the app can verify integrity before applying.
 
 **Tech Stack:** C# + .NET 9 MAUI, CommunityToolkit.Mvvm (`ObservableObject`, `[RelayCommand]`), `System.Net.Http`, `System.IO.Compression`, `System.Security.Cryptography`, PowerShell self-replace script, GitHub Releases API, `gh` CLI (release pipeline)
 
@@ -11,7 +11,7 @@
 ## Progress
 
 - [ ] Task 1: Core service layer — `UpdateInfo`, `IUpdateService`, `UpdateService`
-- [ ] Task 2: ViewModel + UI — DashboardViewModel integration, update banner, DI wiring
+- [ ] Task 2: ViewModel + UI — `ProvidersDashboardViewModel` integration, update banner in `ProvidersDashboardPage.xaml`, DI wiring in `MauiProgram.cs`
 - [ ] Task 3: Release pipeline — SHA256 in `release.ps1`
 
 ---
@@ -19,12 +19,12 @@
 ## Files
 
 - Create: `src/ClaudeUsageTracker.Core/Models/UpdateInfo.cs` — version comparison model
-- Create: `src/ClaudeUsageTracker.Core/Services/IUpdateService.cs` — interface + INotifyPropertyChanged
-- Create: `src/ClaudeUsageTracker.Core/Services/UpdateService.cs` — GitHub API check, download, SHA256 verify, PowerShell self-replace
-- Modify: `src/ClaudeUsageTracker.Core/ViewModels/DashboardViewModel.cs` — add `UpdateService` property + startup hook
-- Modify: `src/ClaudeUsageTracker.Maui/Views/DashboardPage.xaml` — add update banner row
-- Modify: `src/ClaudeUsageTracker.Maui/MauiProgram.cs` — register `IUpdateService` singleton
-- Modify: `scripts/release.ps1` — add SHA256 computation and upload
+- Create: `src/ClaudeUsageTracker.Core/Services/IUpdateService.cs` — interface extending INotifyPropertyChanged
+- Create: `src/ClaudeUsageTracker.Core/Services/UpdateService.cs` — GitHub API check, stream download, SHA256 verify, PowerShell self-replace
+- Modify: `src/ClaudeUsageTracker.Maui/ViewModels/ProvidersDashboardViewModel.cs` — add `IUpdateService?` constructor parameter + public property
+- Modify: `src/ClaudeUsageTracker.Maui/Views/ProvidersDashboardPage.xaml` — add update banner row (Row 1), shift auto-refresh → Row 2, ScrollView → Row 3
+- Modify: `src/ClaudeUsageTracker.Maui/MauiProgram.cs` — register `IUpdateService` singleton with `quitApp` callback, update `ProvidersDashboardViewModel` factory
+- Modify: `scripts/release.ps1` — add SHA256 computation and upload as sidecar asset
 
 ---
 
@@ -54,23 +54,22 @@ public class UpdateInfo
 
 ```csharp
 using System.ComponentModel;
-using ClaudeUsageTracker.Core.Models;
 
 namespace ClaudeUsageTracker.Core.Services;
 
 public interface IUpdateService : INotifyPropertyChanged
 {
-    bool   IsUpdateAvailable    { get; }
-    bool   IsUpdating           { get; }
-    int    UpdateProgress       { get; }  // 0–100
-    string LatestVersion        { get; }
-    string ReleaseNotes         { get; }
-    bool   ShowUpdateBanner     { get; }  // IsUpdateAvailable || IsUpdating
-    string BannerTitle          { get; }  // e.g. "↑ v1.2.0 available"
-    string UpdateButtonText     { get; }  // "Update Now" or "Updating…"
-    double UpdateProgressFraction { get; } // UpdateProgress / 100.0
+    bool   IsUpdateAvailable      { get; }
+    bool   IsUpdating             { get; }
+    int    UpdateProgress         { get; }   // 0–100
+    string LatestVersion          { get; }
+    string ReleaseNotes           { get; }
+    bool   ShowUpdateBanner       { get; }   // true when update available or updating
+    string BannerTitle            { get; }   // "↑ v1.2.0 available" or "Updating to v1.2.0…"
+    string UpdateButtonText       { get; }   // "Update Now" or "Updating…"
+    double UpdateProgressFraction { get; }   // UpdateProgress / 100.0
 
-    Task<UpdateInfo?> CheckForUpdateAsync(CancellationToken ct = default);
+    Task<Models.UpdateInfo?> CheckForUpdateAsync(CancellationToken ct = default);
     Task ApplyUpdateAsync(CancellationToken ct = default);
 }
 ```
@@ -93,28 +92,32 @@ public partial class UpdateService : ObservableObject, IUpdateService
     private readonly string     _currentVersion;
     private readonly string     _repoOwner;
     private readonly string     _repoName;
+    private readonly Action?    _quitApp;
     private readonly HttpClient _http;
     private UpdateInfo?         _pendingUpdate;
 
     [ObservableProperty] private bool   _isUpdateAvailable;
     [ObservableProperty] private bool   _isUpdating;
     [ObservableProperty] private int    _updateProgress;
-    [ObservableProperty] private string _latestVersion  = "";
-    [ObservableProperty] private string _releaseNotes   = "";
+    [ObservableProperty] private string _latestVersion = "";
+    [ObservableProperty] private string _releaseNotes  = "";
 
-    // Computed display properties — recalculate whenever backing fields change
-    public bool   ShowUpdateBanner      => IsUpdateAvailable || IsUpdating;
-    public double UpdateProgressFraction => UpdateProgress / 100.0;
-    public string BannerTitle           => IsUpdating
+    // Computed display properties — re-raised via partial void hooks below
+    public bool   ShowUpdateBanner        => IsUpdateAvailable || IsUpdating;
+    public double UpdateProgressFraction  => UpdateProgress / 100.0;
+    public string BannerTitle             => IsUpdating
         ? $"Updating to v{LatestVersion}…"
         : $"↑  v{LatestVersion} is available";
-    public string UpdateButtonText      => IsUpdating ? "Updating…" : "Update Now";
+    public string UpdateButtonText        => IsUpdating ? "Updating…" : "Update Now";
 
-    public UpdateService(string currentVersion,
-                         string repoOwner = "reckhou",
-                         string repoName  = "ClaudeUsageTracker")
+    public UpdateService(
+        string  currentVersion,
+        Action? quitApp    = null,
+        string  repoOwner  = "reckhou",
+        string  repoName   = "ClaudeUsageTracker")
     {
         _currentVersion = currentVersion;
+        _quitApp        = quitApp;
         _repoOwner      = repoOwner;
         _repoName       = repoName;
 
@@ -122,32 +125,29 @@ public partial class UpdateService : ObservableObject, IUpdateService
         _http.DefaultRequestHeaders.UserAgent
             .Add(new ProductInfoHeaderValue("ClaudeUsageTracker", currentVersion));
 
-        // Start background polling: first check after 3 s, then every 5 min
+        // Start background polling: first check after 3 s, then every 5 min until found
         _ = StartBackgroundPollingAsync();
     }
 
-    // Re-raise computed property changes when backing fields change
-    partial void OnIsUpdateAvailableChanged(bool value)
+    // Fire computed-property change notifications when backing fields change
+    partial void OnIsUpdateAvailableChanged(bool _)
     {
         OnPropertyChanged(nameof(ShowUpdateBanner));
         OnPropertyChanged(nameof(BannerTitle));
     }
 
-    partial void OnIsUpdatingChanged(bool value)
+    partial void OnIsUpdatingChanged(bool _)
     {
         OnPropertyChanged(nameof(ShowUpdateBanner));
         OnPropertyChanged(nameof(BannerTitle));
         OnPropertyChanged(nameof(UpdateButtonText));
     }
 
-    partial void OnUpdateProgressChanged(int value)
+    partial void OnUpdateProgressChanged(int _)
         => OnPropertyChanged(nameof(UpdateProgressFraction));
 
-    partial void OnLatestVersionChanged(string value)
-    {
-        OnPropertyChanged(nameof(BannerTitle));
-        OnPropertyChanged(nameof(UpdateButtonText));
-    }
+    partial void OnLatestVersionChanged(string _)
+        => OnPropertyChanged(nameof(BannerTitle));
 
     private async Task StartBackgroundPollingAsync()
     {
@@ -172,30 +172,30 @@ public partial class UpdateService : ObservableObject, IUpdateService
             var tagName = root.GetProperty("tag_name").GetString() ?? "";
             var body    = root.GetProperty("body").GetString() ?? "";
 
-            // Parse version from tag (e.g. "v1.2.3" → "1.2.3")
+            // Strip "v" prefix from tag, e.g. "v1.2.3" → "1.2.3"
             var versionStr = tagName.TrimStart('v');
             if (!Version.TryParse(versionStr, out var latestVer)) return null;
             if (!Version.TryParse(_currentVersion, out var currentVer)) return null;
 
-            // Find zip + sha256 assets
-            string downloadUrl = "", sha256 = "";
+            // Find .zip asset (skip .sha256 files)
+            string downloadUrl = "";
             if (root.TryGetProperty("assets", out var assets))
             {
                 foreach (var asset in assets.EnumerateArray())
                 {
-                    var name         = asset.GetProperty("name").GetString() ?? "";
-                    var browserUrl   = asset.GetProperty("browser_download_url").GetString() ?? "";
+                    var name = asset.GetProperty("name").GetString() ?? "";
+                    var url2 = asset.GetProperty("browser_download_url").GetString() ?? "";
                     if (name.EndsWith(".zip") && !name.EndsWith(".sha256"))
-                        downloadUrl = browserUrl;
+                        downloadUrl = url2;
                 }
             }
 
-            // Fetch sha256 file content (small, single line)
+            // Fetch sha256 sidecar (appended to zip URL by convention: foo.zip → foo.zip.sha256)
+            string sha256 = "";
             if (!string.IsNullOrEmpty(downloadUrl))
             {
-                var sha256Url = downloadUrl + ".sha256";
-                try { sha256 = (await _http.GetStringAsync(sha256Url, ct)).Trim(); }
-                catch { /* sha256 optional */ }
+                try { sha256 = (await _http.GetStringAsync(downloadUrl + ".sha256", ct)).Trim(); }
+                catch { /* sha256 optional — skip if not present */ }
             }
 
             var info = new UpdateInfo
@@ -210,15 +210,15 @@ public partial class UpdateService : ObservableObject, IUpdateService
 
             if (info.IsUpdateAvailable)
             {
-                _pendingUpdate      = info;
-                LatestVersion       = versionStr;
-                ReleaseNotes        = body;
-                IsUpdateAvailable   = true;
+                _pendingUpdate    = info;
+                LatestVersion     = versionStr;
+                ReleaseNotes      = body;
+                IsUpdateAvailable = true;
             }
 
             return info;
         }
-        catch { return null; }  // Network failure — silent, will retry
+        catch { return null; }  // Network failure — silent, will retry at next interval
     }
 
     [RelayCommand(CanExecute = nameof(CanApplyUpdate))]
@@ -226,65 +226,65 @@ public partial class UpdateService : ObservableObject, IUpdateService
     {
         if (_pendingUpdate is null || IsUpdating) return;
 
-        IsUpdating = true;
+        IsUpdating     = true;
         UpdateProgress = 0;
 
         try
         {
-            var tempDir  = Path.Combine(Path.GetTempPath(), "ClaudeUsageTracker-update");
-            var zipPath  = Path.Combine(tempDir, "ClaudeUsageTracker-update.zip");
+            var tempDir    = Path.Combine(Path.GetTempPath(), "ClaudeUsageTracker-update");
+            var zipPath    = Path.Combine(tempDir, "ClaudeUsageTracker-update.zip");
             var extractDir = Path.Combine(tempDir, "extracted");
 
             if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
             Directory.CreateDirectory(tempDir);
 
-            // --- 1. Download (0–80%) ---
+            // --- Phase 1: Download (reports 0–80%) ---
             using var response = await _http.GetAsync(
                 _pendingUpdate.DownloadUrl,
                 HttpCompletionOption.ResponseHeadersRead, ct);
             response.EnsureSuccessStatusCode();
 
-            var total  = response.Content.Headers.ContentLength ?? -1L;
-            var buffer = new byte[81920];
-            long read  = 0;
+            var   total  = response.Content.Headers.ContentLength ?? -1L;
+            var   buffer = new byte[81920];
+            long  read   = 0;
 
             await using var src  = await response.Content.ReadAsStreamAsync(ct);
             await using var dest = File.Create(zipPath);
-
             int bytesRead;
             while ((bytesRead = await src.ReadAsync(buffer, ct)) > 0)
             {
                 await dest.WriteAsync(buffer.AsMemory(0, bytesRead), ct);
                 read += bytesRead;
-                if (total > 0)
-                    UpdateProgress = (int)(read * 80 / total);
+                if (total > 0) UpdateProgress = (int)(read * 80 / total);
             }
             await dest.FlushAsync(ct);
 
-            // --- 2. Verify SHA256 ---
+            // --- Phase 2: Verify SHA256 ---
             if (!string.IsNullOrEmpty(_pendingUpdate.Sha256))
             {
-                using var hashAlg   = SHA256.Create();
-                await using var fs  = File.OpenRead(zipPath);
-                var hashBytes       = await hashAlg.ComputeHashAsync(fs, ct);
-                var actual          = Convert.ToHexString(hashBytes).ToLowerInvariant();
-                var expected        = _pendingUpdate.Sha256.ToLowerInvariant();
+                using var hashAlg  = SHA256.Create();
+                await using var fs = File.OpenRead(zipPath);
+                var hashBytes      = await hashAlg.ComputeHashAsync(fs, ct);
+                var actual         = Convert.ToHexString(hashBytes).ToLowerInvariant();
+                var expected       = _pendingUpdate.Sha256.ToLowerInvariant();
                 if (actual != expected)
-                    throw new InvalidOperationException($"SHA256 mismatch.\nExpected: {expected}\nActual:   {actual}");
+                    throw new InvalidOperationException(
+                        $"SHA256 mismatch.\nExpected: {expected}\nActual:   {actual}");
             }
 
-            // --- 3. Extract (80–100%) ---
+            // --- Phase 3: Extract (80→100%) ---
             ZipFile.ExtractToDirectory(zipPath, extractDir, overwriteFiles: true);
             UpdateProgress = 100;
 
-            // Find exe in extracted dir
+            // Find the .exe in the extracted folder
             var newExe = Directory.GetFiles(extractDir, "*.exe", SearchOption.AllDirectories)
-                .FirstOrDefault() ?? throw new FileNotFoundException("Exe not found in update package.");
+                .FirstOrDefault()
+                ?? throw new FileNotFoundException("No .exe found in update package.");
 
             var currentExe = Environment.ProcessPath
-                ?? throw new InvalidOperationException("Cannot determine current exe path.");
+                ?? throw new InvalidOperationException("Cannot determine current process path.");
 
-            // --- 4. PowerShell self-replace ---
+            // --- Phase 4: Write PowerShell self-replace script and launch it ---
             var scriptPath = Path.Combine(Path.GetTempPath(), "ClaudeUsageTracker-updater.ps1");
             var destDir    = Path.GetDirectoryName(currentExe)!;
             var srcDir     = Path.GetDirectoryName(newExe)!;
@@ -302,7 +302,8 @@ public partial class UpdateService : ObservableObject, IUpdateService
                 UseShellExecute = true
             });
 
-            Application.Current?.Quit();
+            // Quit via injected callback (MAUI layer supplies Application.Current?.Quit())
+            _quitApp?.Invoke();
         }
         catch
         {
@@ -316,64 +317,68 @@ public partial class UpdateService : ObservableObject, IUpdateService
 }
 ```
 
-**Verify:** In `UpdateService`, set a debug breakpoint or temporarily force `IsUpdateAvailable = true` with a fake `_pendingUpdate`. Confirm `ShowUpdateBanner`, `BannerTitle`, and `UpdateButtonText` return correct computed values. No network call needed for this verification.
+**Verify:** Build the Core project. Set a temporary debug override at the end of `StartBackgroundPollingAsync()` that fires `IsUpdateAvailable = true` and `LatestVersion = "99.0.0"` immediately on start. Confirm `ShowUpdateBanner` returns `true`, `BannerTitle` returns `"↑  v99.0.0 is available"`, and `UpdateButtonText` returns `"Update Now"`. Remove override after verifying. No network required.
 
 ---
 
 ### Task 2: ViewModel integration + MAUI update banner UI
 
-**Files:** `Core/ViewModels/DashboardViewModel.cs`, `Maui/Views/DashboardPage.xaml`, `Maui/MauiProgram.cs`
+**Files:** `Maui/ViewModels/ProvidersDashboardViewModel.cs`, `Maui/Views/ProvidersDashboardPage.xaml`, `Maui/MauiProgram.cs`
 **Depends on:** Task 1
 
-#### `DashboardViewModel.cs` — add `UpdateService` property
+#### `ProvidersDashboardViewModel.cs` — add `IUpdateService?` constructor parameter
 
-Add `IUpdateService? updateService = null` as a new optional constructor parameter, and expose it as a public property:
+Add `IUpdateService? updateService = null` as the last constructor parameter and expose it as a public property. Because `ProvidersDashboardViewModel` is a Singleton, the service reference is set once and lives for the entire app lifetime — no state-loss concern.
 
 ```csharp
-// Constructor signature change:
-public partial class DashboardViewModel(
-    ISecureStorageService storage,
-    AnthropicApiService api,
-    IUsageDataService db,
-    IClaudeAiUsageService? claudeAi = null,
-    IUpdateService? updateService = null) : ObservableObject
+// Change the constructor signature from:
+public ProvidersDashboardViewModel(UsageDataService db, IEnumerable<IUsageProvider> providers, ISecureStorageService storage)
+
+// To:
+public ProvidersDashboardViewModel(
+    UsageDataService           db,
+    IEnumerable<IUsageProvider> providers,
+    ISecureStorageService      storage,
+    IUpdateService?            updateService = null)
 {
-    // ... existing fields ...
+    _db        = db;
+    _providers = providers;
+    _storage   = storage;
+    UpdateService = updateService;
+}
 
-    public IUpdateService? UpdateService { get; } = updateService;
+// Add the property (no [ObservableProperty] — it's a direct reference, set once in ctor):
+public IUpdateService? UpdateService { get; }
 ```
 
-No further changes to the ViewModel — `UpdateService` is a Singleton `ObservableObject`, so XAML binds directly to its properties and commands.
+No further ViewModel changes. XAML binds directly to `UpdateService.*` sub-properties — the Singleton `ObservableObject` raises its own `PropertyChanged` events.
 
-#### `DashboardPage.xaml` — update banner
+#### `ProvidersDashboardPage.xaml` — add update banner row
 
-Change the outer Grid's `RowDefinitions` from 4 rows to 5, insert the update banner at Row 1, and shift existing rows down:
+The current outer grid has 3 rows (`Auto,Auto,*`). The hidden WebView spans all rows. Insert a new Row 1 for the update banner, shift auto-refresh to Row 2 and ScrollView to Row 3.
 
-```xml
-<!-- Change this: -->
-<Grid RowDefinitions="Auto,Auto,Auto,Auto" Padding="20" RowSpacing="16">
+**Changes needed:**
 
-<!-- To this: -->
-<Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto" Padding="20" RowSpacing="16">
-```
+1. `RowDefinitions="Auto,Auto,*"` → `RowDefinitions="Auto,Auto,Auto,*"`
+2. `WebView Grid.RowSpan="3"` → `Grid.RowSpan="4"`
+3. Auto-refresh Grid: `Grid.Row="1"` → `Grid.Row="2"`
+4. ScrollView: `Grid.Row="2"` → `Grid.Row="3"`
 
-Shift existing Grid.Row values: Row 1→2, Row 2→3, Row 3→4 (Row 0 header stays at 0).
-
-Insert the update banner after the header (Row 1):
+Insert the update banner between header (Row 0) and auto-refresh (now Row 2):
 
 ```xml
-<!-- Update Banner — shown when update available or actively updating -->
+<!-- Update Banner — Row 1, visible only when ShowUpdateBanner is true -->
 <Border Grid.Row="1"
         IsVisible="{Binding UpdateService.ShowUpdateBanner}"
         BackgroundColor="{AppThemeBinding Light=#1B4332, Dark=#1A2E22}"
         StrokeThickness="1"
-        Stroke="{AppThemeBinding Light=#2D6A4F, Dark=#2D6A4F}"
+        Stroke="#2D6A4F"
         StrokeShape="RoundRectangle 8"
         Padding="16,10">
     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
 
-        <!-- Left: title + progress bar -->
-        <VerticalStackLayout Grid.Column="0" VerticalOptions="Center" Spacing="6">
+        <!-- Left: banner title + progress bar (during update) + release notes (when waiting) -->
+        <VerticalStackLayout Grid.Column="0" VerticalOptions="Center" Spacing="4">
             <Label Text="{Binding UpdateService.BannerTitle}"
                    FontSize="13"
                    FontAttributes="Bold"
@@ -390,7 +395,7 @@ Insert the update banner after the header (Row 1):
                    LineBreakMode="TailTruncation" />
         </VerticalStackLayout>
 
-        <!-- Right: Update Now button -->
+        <!-- Right: Update Now button — disabled while updating -->
         <Button Grid.Column="1"
                 Text="{Binding UpdateService.UpdateButtonText}"
                 Command="{Binding UpdateService.ApplyUpdateCommand}"
@@ -405,31 +410,41 @@ Insert the update banner after the header (Row 1):
 </Border>
 ```
 
-Note: `InvertedBoolConverter` is already in use in the existing XAML (Refresh button uses it), so no new converter is needed.
+`InvertedBoolConverter` is already registered in `App.xaml` (used by existing Refresh All button) — no new resource needed.
 
-When `UpdateService` is `null` (e.g., in design-time previews), the `IsVisible` binding returns `false` — the banner stays hidden.
+When `UpdateService` is `null`, `{Binding UpdateService.ShowUpdateBanner}` resolves to `false` — the banner stays collapsed with zero height.
 
-#### `MauiProgram.cs` — register `IUpdateService`
+#### `MauiProgram.cs` — register `IUpdateService` and update ViewModel factory
 
-Add after the `HttpClient` registration:
+Add `IUpdateService` registration before `ProvidersDashboardViewModel`, and update the factory to pass it:
 
 ```csharp
+// After existing service registrations, add:
 builder.Services.AddSingleton<IUpdateService>(_ =>
-    new UpdateService(AppInfo.VersionString));
+    new UpdateService(
+        AppInfo.VersionString,
+        quitApp: () => Application.Current?.Quit()));
+
+// Update ProvidersDashboardViewModel factory to:
+builder.Services.AddSingleton<ProvidersDashboardViewModel>(sp =>
+    new ProvidersDashboardViewModel(
+        sp.GetRequiredService<IUsageDataService>() as UsageDataService
+            ?? throw new InvalidOperationException("UsageDataService must be UsageDataService"),
+        sp.GetRequiredService<IEnumerable<IUsageProvider>>(),
+        sp.GetRequiredService<ISecureStorageService>(),
+        sp.GetRequiredService<IUpdateService>()));
 ```
 
-Update the `DashboardViewModel` factory to inject it:
+Add `using ClaudeUsageTracker.Core.Services;` if not already present (it is — used by `IUsageDataService` etc.).
+
+**Verify:** Launch the app. Banner is invisible. Open `UpdateService.cs` and temporarily add to the end of `StartBackgroundPollingAsync()`, before the `while` loop:
 
 ```csharp
-builder.Services.AddTransient<DashboardViewModel>(sp => new DashboardViewModel(
-    sp.GetRequiredService<ISecureStorageService>(),
-    sp.GetRequiredService<AnthropicApiService>(),
-    sp.GetRequiredService<IUsageDataService>(),
-    sp.GetRequiredService<IClaudeAiUsageService>(),
-    sp.GetRequiredService<IUpdateService>()));
+// DEBUG ONLY — remove after testing
+LatestVersion = "99.0.0"; IsUpdateAvailable = true; return;
 ```
 
-**Verify:** Launch the app. The update banner is invisible (no update available). Temporarily add a debug override in `UpdateService.CheckForUpdateAsync()` that sets `LatestVersion = "99.0.0"` and `IsUpdateAvailable = true` after 2 seconds. The green banner should appear above the stats cards with `↑  v99.0.0 is available` and an "Update Now" button. Remove the debug override after verifying.
+Rebuild. The green banner `"↑  v99.0.0 is available"` appears between the "Plan Usage" header and the auto-refresh row. The "Update Now" button is visible and enabled. Remove the debug lines after confirming.
 
 ---
 
@@ -437,10 +452,10 @@ builder.Services.AddTransient<DashboardViewModel>(sp => new DashboardViewModel(
 
 **Files:** `scripts/release.ps1`
 
-After step 5 (zip creation), add SHA256 computation and save it as a sidecar file:
+After the existing step 5 (zip creation — `Compress-Archive`), insert the SHA256 block:
 
 ```powershell
-# 5b. Compute SHA256 for integrity verification
+# 5b. Compute SHA256 hash for update integrity verification
 Write-Host "Computing SHA256 hash..." -ForegroundColor Cyan
 
 $hashValue = (Get-FileHash $ZipPath -Algorithm SHA256).Hash.ToLower()
@@ -450,10 +465,10 @@ Set-Content -Path $hashPath -Value $hashValue -NoNewline -Encoding ASCII
 Write-Host "  SHA256: $hashValue" -ForegroundColor Gray
 ```
 
-Update step 9 (`gh release create`) to upload both files:
+Update step 9 (`gh release create`) to upload both files as assets:
 
 ```powershell
-# 9. Create GitHub Release (upload zip + sha256 sidecar)
+# 9. Create GitHub Release — attach both zip and sha256 sidecar
 Write-Host "Creating GitHub Release v$Version..." -ForegroundColor Cyan
 
 $releaseUrl = gh release create "v$Version" `
@@ -467,6 +482,17 @@ if ($LASTEXITCODE -ne 0) {
 }
 ```
 
-**Verify:** Run `./scripts/release.ps1 -Version 0.0.1-test` (or check locally by calling just the hash steps). The GitHub release should show two assets: `ClaudeUsageTracker-v0.0.1-test-win-x64.zip` and `ClaudeUsageTracker-v0.0.1-test-win-x64.zip.sha256`. The `.sha256` file should contain a single lowercase hex string with no newline.
+**Verify:** Run locally:
+```powershell
+# Test just the hash step in isolation
+$ZipPath  = "C:\Temp\test.zip"
+"test content" | Set-Content $ZipPath
+$hashValue = (Get-FileHash $ZipPath -Algorithm SHA256).Hash.ToLower()
+$hashPath  = $ZipPath + ".sha256"
+Set-Content -Path $hashPath -Value $hashValue -NoNewline -Encoding ASCII
+Get-Content $hashPath   # should print a single 64-char lowercase hex string, no newline
+```
+
+On a real release run, the GitHub Release page should show two assets: `ClaudeUsageTracker-v{Version}-win-x64.zip` and `ClaudeUsageTracker-v{Version}-win-x64.zip.sha256`.
 
 ---
