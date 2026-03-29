@@ -14,9 +14,20 @@
                  Source="https://claude.ai/settings/usage" />
 
         <!-- Header -->
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4">
             <Label Grid.Column="0" Text="Plan Usage" FontSize="22" FontAttributes="Bold" VerticalOptions="Center" />
-            <Grid Grid.Column="1">
+
+            <!-- Mini Mode toggle -->
+            <Button Grid.Column="1"
+                    x:Name="MiniModeButton"
+                    Text="Mini"
+                    FontSize="13"
+                    Clicked="OnMiniModeClicked"
+                    BackgroundColor="Transparent"
+                    TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+
+            <!-- Refresh All -->
+            <Grid Grid.Column="2">
                 <Button Text="Refresh All" FontSize="13"
                         Command="{Binding RefreshAllCommand}"
                         IsVisible="{Binding ShowRefreshAllSpinner, Converter={StaticResource InvertedBoolConverter}}"

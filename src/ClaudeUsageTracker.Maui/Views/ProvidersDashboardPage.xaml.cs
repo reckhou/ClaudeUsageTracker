@@ -11,6 +11,7 @@ public partial class ProvidersDashboardPage : ContentPage
     private readonly ProvidersDashboardViewModel _vm;
     private TaskCompletionSource<QuotaRecord?>? _claudeTcs;
     private string? _extractedUrl;
+    private Window? _miniWindow;
 
     /// <summary>Set to the current active page before any refresh call so providers can reach the embedded WebView.</summary>
     public static ProvidersDashboardPage? Current { get; private set; }
@@ -215,6 +216,26 @@ public partial class ProvidersDashboardPage : ContentPage
             System.Diagnostics.Debug.WriteLine($"[ClaudeSilentWebView] Parse error: {parseError}");
             tcs.TrySetResult(null);
         }
+    }
+
+    private void OnMiniModeClicked(object sender, EventArgs e)
+    {
+        if (_miniWindow != null)
+        {
+            Application.Current!.CloseWindow(_miniWindow);
+            // _miniWindow is cleared by the Destroying handler
+            return;
+        }
+
+        var miniPage = Handler!.MauiContext!.Services.GetRequiredService<MiniModePage>();
+        _miniWindow = new Window(miniPage) { Title = "Claude Usage" };
+        _miniWindow.Destroying += (_, _) =>
+        {
+            _miniWindow = null;
+            MiniModeButton.Text = "Mini";
+        };
+        Application.Current!.OpenWindow(_miniWindow);
+        MiniModeButton.Text = "✕ Mini";
     }
 
     private Microsoft.Web.WebView2.Core.CoreWebView2? TryGetCoreWebView2()

@@ -46,6 +46,9 @@ public static class MauiProgram
 				sp.GetRequiredService<IUpdateService>()));
 		builder.Services.AddTransient<SetupPage>();
 		builder.Services.AddTransient<ProvidersDashboardPage>();
+		builder.Services.AddSingleton<MiniModeWindowService>();
+		builder.Services.AddTransient<MiniModeViewModel>();
+		builder.Services.AddTransient<MiniModePage>();
 
 #if DEBUG
 		builder.Logging.AddDebug();
