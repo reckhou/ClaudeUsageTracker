@@ -19,7 +19,24 @@ public partial class MiniModePage : ContentPage
     protected override void OnAppearing()
     {
         base.OnAppearing();
-        // Window handle is ready by OnAppearing — configure chrome, size, opacity, always-on-top
+        // OnAppearing fires during Application.AddWindow, before the WinUI platform
+        // window exists. Window.Handler is null at this point in the activation sequence.
+        // Defer window configuration to Window.HandlerChanged, which fires after
+        // ConnectHandler wires up MauiWinUIWindow as the PlatformView (HWND ready).
+        if (Window?.Handler?.PlatformView is not null)
+        {
+            _windowService.ConfigureWindow(Window, _vm.IsAlwaysOnTop, _vm.Opacity);
+        }
+        else if (Window is not null)
+        {
+            Window.HandlerChanged += OnWindowHandlerReady;
+        }
+    }
+
+    private void OnWindowHandlerReady(object? sender, EventArgs e)
+    {
+        if (Window?.Handler?.PlatformView is null) return;
+        Window.HandlerChanged -= OnWindowHandlerReady;
         _windowService.ConfigureWindow(Window, _vm.IsAlwaysOnTop, _vm.Opacity);
     }
 
