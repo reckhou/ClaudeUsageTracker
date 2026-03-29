@@ -6,23 +6,46 @@
              x:Class="ClaudeUsageTracker.Maui.Views.ProvidersDashboardPage"
              Title="Providers">
 
-    <Grid RowDefinitions="Auto,*" Padding="20" RowSpacing="16">
+    <Grid RowDefinitions="Auto,Auto,*" Padding="20" RowSpacing="16">
 
         <!-- Hidden WebView for silent Claude quota fetch — lives in page layout context, not AppShell -->
-        <WebView x:Name="ClaudeSilentWebView" Grid.Row="0" Grid.RowSpan="2"
+        <WebView x:Name="ClaudeSilentWebView" Grid.Row="0" Grid.RowSpan="3"
                  IsVisible="False"
                  Source="https://claude.ai/settings/usage" />
 
         <!-- Header -->
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
-            <Label Text="Plan Usage" FontSize="22" FontAttributes="Bold" VerticalOptions="Center" />
-            <Button Grid.Column="1" Text="Refresh All"
-                    Command="{Binding RefreshAllCommand}"
-                    FontSize="13" />
+            <Label Grid.Column="0" Text="Plan Usage" FontSize="22" FontAttributes="Bold" VerticalOptions="Center" />
+            <Grid Grid.Column="1" WidthRequest="44" HeightRequest="44">
+                <Button Text="↻" FontSize="18"
+                        Command="{Binding RefreshAllCommand}"
+                        IsVisible="{Binding IsAnyRefreshing, Converter={StaticResource InvertedBoolConverter}}"
+                        BackgroundColor="Transparent"
+                        TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                <ActivityIndicator IsRunning="{Binding IsAnyRefreshing}"
+                                   IsVisible="{Binding IsAnyRefreshing}"
+                                   WidthRequest="22" HeightRequest="22"
+                                   HorizontalOptions="Center" VerticalOptions="Center" />
+            </Grid>
+        </Grid>
+
+        <!-- Auto-refresh controls -->
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,Auto,*" ColumnSpacing="8" VerticalOptions="Center">
+            <Label Grid.Column="0" Text="Auto refresh every" FontSize="13" VerticalOptions="Center"
+                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+            <Entry Grid.Column="1" Text="{Binding AutoRefreshMinutes}"
+                   Keyboard="Numeric" WidthRequest="50" FontSize="13"
+                   HorizontalTextAlignment="Center" VerticalOptions="Center"
+                   IsEnabled="{Binding IsAutoRefreshRunning, Converter={StaticResource InvertedBoolConverter}}" />
+            <Label Grid.Column="2" Text="min" FontSize="13" VerticalOptions="Center"
+                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+            <Button Grid.Column="3" Text="{Binding AutoRefreshToggleText}"
+                    Command="{Binding ToggleAutoRefreshCommand}"
+                    FontSize="13" HorizontalOptions="Start" />
         </Grid>
 
         <!-- Provider cards list -->
-        <ScrollView Grid.Row="1">
+        <ScrollView Grid.Row="2">
             <VerticalStackLayout Spacing="12">
 
                 <!-- Empty state -->

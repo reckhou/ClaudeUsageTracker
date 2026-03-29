@@ -6,14 +6,21 @@ using ClaudeUsageTracker.Core.Services;
 
 namespace ClaudeUsageTracker.Maui.ViewModels;
 
-public partial class ProvidersDashboardViewModel : ObservableObject
+public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
 {
     private readonly UsageDataService _db;
     private readonly IEnumerable<IUsageProvider> _providers;
     private readonly ISecureStorageService _storage;
+    private System.Timers.Timer? _autoRefreshTimer;
 
     [ObservableProperty] private string _errorMessage = "";
     [ObservableProperty] private bool _hasError;
+    [ObservableProperty] private int _autoRefreshMinutes = 5;
+    [ObservableProperty] private bool _isAutoRefreshRunning;
+
+    public string AutoRefreshToggleText => IsAutoRefreshRunning ? "Stop" : "Start";
+
+    public bool IsAnyRefreshing => Providers.Any(p => p.IsRefreshing);
 
     public ObservableCollection<ProviderCardViewModel> Providers { get; } = [];
 
@@ -24,6 +31,41 @@ public partial class ProvidersDashboardViewModel : ObservableObject
         _storage = storage;
     }
 
+    partial void OnIsAutoRefreshRunningChanged(bool value) => OnPropertyChanged(nameof(AutoRefreshToggleText));
+
+    [RelayCommand]
+    public void ToggleAutoRefresh()
+    {
+        if (IsAutoRefreshRunning)
+        {
+            StopAutoRefresh();
+        }
+        else
+        {
+            var minutes = Math.Clamp(AutoRefreshMinutes, 1, 60);
+            AutoRefreshMinutes = minutes;
+            _autoRefreshTimer?.Dispose();
+            _autoRefreshTimer = new System.Timers.Timer(TimeSpan.FromMinutes(minutes).TotalMilliseconds);
+            _autoRefreshTimer.Elapsed += async (_, _) => await RefreshAllAsync();
+            _autoRefreshTimer.AutoReset = true;
+            _autoRefreshTimer.Start();
+            IsAutoRefreshRunning = true;
+        }
+    }
+
+    private void StopAutoRefresh()
+    {
+        _autoRefreshTimer?.Stop();
+        _autoRefreshTimer?.Dispose();
+        _autoRefreshTimer = null;
+        IsAutoRefreshRunning = false;
+    }
+
+    public void Dispose()
+    {
+        StopAutoRefresh();
+    }
+
     [RelayCommand]
     public async Task RefreshAllAsync()
     {
@@ -31,6 +73,7 @@ public partial class ProvidersDashboardViewModel : ObservableObject
         ErrorMessage = "";
         var tasks = _providers.Select(p => RefreshProviderAsync(p)).ToList();
         await Task.WhenAll(tasks);
+        OnPropertyChanged(nameof(IsAnyRefreshing));
     }
 
     private async Task RefreshProviderAsync(IUsageProvider provider)
@@ -42,6 +85,11 @@ public partial class ProvidersDashboardViewModel : ObservableObject
         if (card == null)
         {
             card = new ProviderCardViewModel { ProviderName = provider.ProviderName };
+            card.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(ProviderCardViewModel.IsRefreshing))
+                    OnPropertyChanged(nameof(IsAnyRefreshing));
+            };
             // Must add to ObservableCollection on main thread to avoid UI blackouts
             await MainThread.InvokeOnMainThreadAsync(() =>
             {
