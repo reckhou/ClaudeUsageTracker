@@ -45,10 +45,14 @@ public static class MauiProgram
 				sp.GetRequiredService<ISecureStorageService>(),
 				sp.GetRequiredService<IUpdateService>()));
 		builder.Services.AddTransient<SetupPage>();
-		builder.Services.AddTransient<ProvidersDashboardPage>();
 		builder.Services.AddSingleton<MiniModeWindowService>();
+		builder.Services.AddTransient<ProvidersDashboardPage>(sp =>
+			new ProvidersDashboardPage(
+				sp.GetRequiredService<ProvidersDashboardViewModel>(),
+				sp.GetRequiredService<MiniModeWindowService>()));
 		builder.Services.AddTransient<MiniModeViewModel>();
 		builder.Services.AddTransient<MiniModePage>();
+		builder.Services.AddTransient<MiniModeSettingsPage>();
 
 #if DEBUG
 		builder.Logging.AddDebug();

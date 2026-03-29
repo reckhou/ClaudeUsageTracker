@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Net.Http;
 using ClaudeUsageTracker.Core.Models;
+using ClaudeUsageTracker.Maui.Services;
 using ClaudeUsageTracker.Maui.ViewModels;
 using Microsoft.Maui.Controls;
 
@@ -9,6 +10,7 @@ namespace ClaudeUsageTracker.Maui.Views;
 public partial class ProvidersDashboardPage : ContentPage
 {
     private readonly ProvidersDashboardViewModel _vm;
+    private readonly MiniModeWindowService _miniModeWindowService;
     private TaskCompletionSource<QuotaRecord?>? _claudeTcs;
     private string? _extractedUrl;
     private Window? _miniWindow;
@@ -16,10 +18,11 @@ public partial class ProvidersDashboardPage : ContentPage
     /// <summary>Set to the current active page before any refresh call so providers can reach the embedded WebView.</summary>
     public static ProvidersDashboardPage? Current { get; private set; }
 
-    public ProvidersDashboardPage(ProvidersDashboardViewModel vm)
+    public ProvidersDashboardPage(ProvidersDashboardViewModel vm, MiniModeWindowService miniModeWindowService)
     {
         InitializeComponent();
         _vm = vm;
+        _miniModeWindowService = miniModeWindowService;
         BindingContext = vm;
         Current = this;
         ClaudeSilentWebView.Navigated += OnClaudeSilentNavigated;
@@ -223,19 +226,28 @@ public partial class ProvidersDashboardPage : ContentPage
         if (_miniWindow != null)
         {
             Application.Current!.CloseWindow(_miniWindow);
-            // _miniWindow is cleared by the Destroying handler
+            // _miniWindow cleared + main window restored by the Destroying handler
             return;
         }
 
-        var miniPage = Handler!.MauiContext!.Services.GetRequiredService<MiniModePage>();
-        _miniWindow = new Window(miniPage) { Title = "Claude Usage" };
+        // Store main window reference before opening mini so the service can hide it
+        _miniModeWindowService.SetMainWindow(Window!);
+
+        // Construct MiniModePage directly (not via DI) so we can pass the resolved
+        // MiniModeViewModel instance to MiniModeSettingsPage later without creating
+        // a second, disconnected ViewModel instance.
+        var miniVm   = Handler!.MauiContext!.Services.GetRequiredService<MiniModeViewModel>();
+        var miniPage = new MiniModePage(miniVm, _miniModeWindowService);
+        _miniWindow  = new Window(miniPage) { Title = "Claude Usage" };
         _miniWindow.Destroying += (_, _) =>
         {
+            // Ensure main window is restored even if mini was force-closed
+            _miniModeWindowService.ShowMainWindow();
             _miniWindow = null;
-            MiniModeButton.Text = "Mini";
+            MiniModeButton.Text = "⊞ Mini";
         };
         Application.Current!.OpenWindow(_miniWindow);
-        MiniModeButton.Text = "✕ Mini";
+        MiniModeButton.Text = "⊠ Mini";
     }
 
     private Microsoft.Web.WebView2.Core.CoreWebView2? TryGetCoreWebView2()
