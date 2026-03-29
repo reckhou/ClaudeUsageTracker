@@ -43,6 +43,35 @@ public partial class DashboardViewModel(
     public ObservableCollection<DailyUsage> DailyUsages { get; } = new();
     public ObservableCollection<TokenUsage> TokenChartData { get; } = new();
 
+    public string PageTitle => SelectedProvider switch
+    {
+        ProviderFilter.Anthropic => "Anthropic Usage Tracker",
+        ProviderFilter.MiniMaxi  => "MiniMaxi Usage Tracker",
+        ProviderFilter.GoogleAI  => "Google AI Usage Tracker",
+        _                        => "Usage Tracker"
+    };
+
+    public bool IsTimeRange24h => SelectedTimeRange == TokenTimeRange.Past24Hours;
+    public bool IsTimeRange7d  => SelectedTimeRange == TokenTimeRange.Past7Days;
+    public bool IsTimeRange30d => SelectedTimeRange == TokenTimeRange.Past30Days;
+
+    public string? CostUnavailableMessage { get; private set; }
+    public string? TokenUnavailableMessage { get; private set; }
+
+    partial void OnSelectedProviderChanged(ProviderFilter value)
+    {
+        OnPropertyChanged(nameof(PageTitle));
+        _ = LoadFromDbAsync();
+    }
+
+    partial void OnSelectedTimeRangeChanged(TokenTimeRange value)
+    {
+        OnPropertyChanged(nameof(IsTimeRange24h));
+        OnPropertyChanged(nameof(IsTimeRange7d));
+        OnPropertyChanged(nameof(IsTimeRange30d));
+        _ = LoadTokenChartDataAsync();
+    }
+
     [RelayCommand]
     public async Task RefreshAsync()
     {
@@ -117,7 +146,7 @@ public partial class DashboardViewModel(
             TokenTimeRange.Past30Days => "Past 30 Days (Daily)",
             _ => ""
         };
-        _ = LoadTokenChartDataAsync();
+        // OnSelectedTimeRangeChanged partial fires LoadTokenChartDataAsync
     }
 
     private async Task LoadFromDbAsync()
@@ -148,16 +177,26 @@ public partial class DashboardViewModel(
             .Sum(r => r.InputTokens + r.OutputTokens + r.CacheReadTokens + r.CacheCreationTokens);
         HasAdminApiData = costRecords.Any();
 
-        // Daily usage for chart (last 30 days)
+        // Daily usage for chart (last 30 days) — only Anthropic has historical cost data
         DailyUsages.Clear();
-        for (int i = 30; i >= 0; i--)
+        if (SelectedProvider == ProviderFilter.Anthropic)
         {
-            var date = today.AddDays(-i);
-            var dayUsage = usageRecords.Where(r => r.BucketStart.Date == date).ToList();
-            var dayCost = costRecords.Where(r => r.BucketStart.Date == date).Sum(r => r.CostUsd);
-            var dayTokens = dayUsage.Sum(r => r.InputTokens + r.OutputTokens);
-            DailyUsages.Add(new DailyUsage(date, dayCost, dayTokens));
+            for (int i = 30; i >= 0; i--)
+            {
+                var date = today.AddDays(-i);
+                var dayUsage = usageRecords.Where(r => r.BucketStart.Date == date).ToList();
+                var dayCost = costRecords.Where(r => r.BucketStart.Date == date).Sum(r => r.CostUsd);
+                var dayTokens = dayUsage.Sum(r => r.InputTokens + r.OutputTokens);
+                DailyUsages.Add(new DailyUsage(date, dayCost, dayTokens));
+            }
+            CostUnavailableMessage = HasAdminApiData ? null : "No cost data — add an Admin API key in Settings";
         }
+        else
+        {
+            var providerDisplayName = PageTitle.Replace(" Usage Tracker", "");
+            CostUnavailableMessage = $"Daily cost history is not available for {providerDisplayName}";
+        }
+        OnPropertyChanged(nameof(CostUnavailableMessage));
 
         // Top model (from Anthropic Admin API)
         var byModel = usageRecords
@@ -227,16 +266,28 @@ public partial class DashboardViewModel(
 
             foreach (var g in grouped)
                 TokenChartData.Add(new TokenUsage(g.Key, g.Sum(r => r.InputTokens + r.OutputTokens)));
+
+            TokenUnavailableMessage = TokenChartData.Count == 0
+                ? "No token data — add an Admin API key in Settings"
+                : null;
         }
         else
         {
-            // MiniMaxi / GoogleAI — aggregate only (current usage snapshot)
+            // MiniMaxi / GoogleAI — snapshot only (no historical token data)
             var allRecords = await db.GetAllProviderRecordsAsync();
             var recordName = SelectedProvider.ToString();
             var record = allRecords.FirstOrDefault(r => r.Provider == recordName);
             if (record != null && record.IntervalUsed > 0)
+            {
                 TokenChartData.Add(new TokenUsage(DateTime.UtcNow, record.IntervalUsed));
+                TokenUnavailableMessage = null;
+            }
+            else
+            {
+                TokenUnavailableMessage = $"No token snapshot available for {recordName}";
+            }
         }
+        OnPropertyChanged(nameof(TokenUnavailableMessage));
     }
 
     private static string FormatResetsAt(DateTime utc)

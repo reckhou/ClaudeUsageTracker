@@ -1,5 +1,6 @@
 using ClaudeUsageTracker.Core.ViewModels;
 using System.Collections.Specialized;
+using System.ComponentModel;
 
 namespace ClaudeUsageTracker.Maui.Views;
 
@@ -14,18 +15,19 @@ public partial class DashboardPage : ContentPage
         BindingContext = vm;
         vm.DailyUsages.CollectionChanged += OnDailyUsagesChanged;
         vm.TokenChartData.CollectionChanged += OnTokenChartDataChanged;
+        vm.PropertyChanged += OnVmPropertyChanged;
     }
 
     protected override void OnAppearing()
     {
         base.OnAppearing();
         _vm.RefreshCommand.Execute(null);
-        ProviderPicker.SelectedIndex = 0; // Default to Anthropic
+        ProviderPicker.SelectedIndex = (int)_vm.SelectedProvider;
     }
 
     private void OnDailyUsagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        CostChart.Drawable = new CostBarChartDrawable(_vm.DailyUsages);
+        CostChart.Drawable = new CostBarChartDrawable(_vm.DailyUsages, _vm.CostUnavailableMessage);
         CostChart.Invalidate();
     }
 
@@ -33,15 +35,30 @@ public partial class DashboardPage : ContentPage
     {
         TokenChart.Drawable = new TokenBarChartDrawable(
             _vm.TokenChartData.ToList(),
-            _vm.TimeRangeLabel);
+            _vm.TimeRangeLabel,
+            _vm.TokenUnavailableMessage);
         TokenChart.Invalidate();
+    }
+
+    private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(DashboardViewModel.CostUnavailableMessage))
+        {
+            CostChart.Drawable = new CostBarChartDrawable(_vm.DailyUsages, _vm.CostUnavailableMessage);
+            CostChart.Invalidate();
+        }
+        else if (e.PropertyName is nameof(DashboardViewModel.TokenUnavailableMessage))
+        {
+            TokenChart.Drawable = new TokenBarChartDrawable(
+                _vm.TokenChartData.ToList(), _vm.TimeRangeLabel, _vm.TokenUnavailableMessage);
+            TokenChart.Invalidate();
+        }
     }
 
     private void OnProviderChanged(object sender, EventArgs e)
     {
         if (ProviderPicker.SelectedIndex < 0) return;
         _vm.SelectedProvider = (ProviderFilter)ProviderPicker.SelectedIndex;
-        _ = _vm.LoadTokenChartDataAsync();
     }
 
     private async void OnSettingsClicked(object? sender, EventArgs e)

@@ -3,21 +3,24 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:views="clr-namespace:ClaudeUsageTracker.Maui.Views"
              x:Class="ClaudeUsageTracker.Maui.Views.DashboardPage"
-             Title="Claude Usage Tracker">
+             Title="{Binding PageTitle}">
 
     <Grid RowDefinitions="Auto,Auto,Auto,Auto" Padding="20" RowSpacing="16">
 
         <!-- Header -->
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto">
-            <Label Text="Claude Usage Tracker" FontSize="22" FontAttributes="Bold" VerticalOptions="Center" />
-            <Button Grid.Column="1" Text="Settings"
-                    Clicked="OnSettingsClicked"
-                    BackgroundColor="Transparent"
-                    TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}"
-                    Margin="0,0,8,0" />
-            <Button Grid.Column="2" Text="Refresh"
-                    Command="{Binding RefreshCommand}"
-                    IsEnabled="{Binding IsRefreshing, Converter={StaticResource InvertedBoolConverter}}" />
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+            <Label Text="{Binding PageTitle}" FontSize="22" FontAttributes="Bold" VerticalOptions="Center" />
+            <Grid Grid.Column="1" WidthRequest="44" HeightRequest="44">
+                <Button Text="↻" FontSize="18"
+                        Command="{Binding RefreshCommand}"
+                        IsVisible="{Binding IsRefreshing, Converter={StaticResource InvertedBoolConverter}}"
+                        BackgroundColor="Transparent"
+                        TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                <ActivityIndicator IsRunning="{Binding IsRefreshing}"
+                                   IsVisible="{Binding IsRefreshing}"
+                                   WidthRequest="22" HeightRequest="22"
+                                   HorizontalOptions="Center" VerticalOptions="Center" />
+            </Grid>
         </Grid>
 
         <!-- Stats Cards — billing (Admin API) -->
@@ -76,9 +79,33 @@
             </Grid>
 
             <StackLayout Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
-                <Button Text="24h" Command="{Binding SetTimeRangeCommand}" CommandParameter="Past24Hours" Padding="8,4" />
-                <Button Text="7d" Command="{Binding SetTimeRangeCommand}" CommandParameter="Past7Days" Padding="8,4" Margin="4,0" />
-                <Button Text="30d" Command="{Binding SetTimeRangeCommand}" CommandParameter="Past30Days" Padding="8,4" />
+                <Button Text="24h"
+                        Command="{Binding SetTimeRangeCommand}" CommandParameter="Past24Hours"
+                        Style="{StaticResource TimeRangeButton}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsTimeRange24h}" Value="True">
+                            <Setter Property="Style" Value="{StaticResource TimeRangeButtonSelected}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </Button>
+                <Button Text="7d" Margin="4,0"
+                        Command="{Binding SetTimeRangeCommand}" CommandParameter="Past7Days"
+                        Style="{StaticResource TimeRangeButton}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsTimeRange7d}" Value="True">
+                            <Setter Property="Style" Value="{StaticResource TimeRangeButtonSelected}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </Button>
+                <Button Text="30d"
+                        Command="{Binding SetTimeRangeCommand}" CommandParameter="Past30Days"
+                        Style="{StaticResource TimeRangeButton}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding IsTimeRange30d}" Value="True">
+                            <Setter Property="Style" Value="{StaticResource TimeRangeButtonSelected}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </Button>
             </StackLayout>
 
             <GraphicsView Grid.Row="2" x:Name="TokenChart" HeightRequest="200" />
