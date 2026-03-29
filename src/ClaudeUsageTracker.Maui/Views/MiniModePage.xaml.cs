@@ -7,6 +7,7 @@ public partial class MiniModePage : ContentPage
 {
     private readonly MiniModeWindowService _windowService;
     private readonly MiniModeViewModel _vm;
+    private Window? _settingsWindow;
 
     public MiniModePage(MiniModeViewModel vm, MiniModeWindowService windowService)
     {
@@ -19,30 +20,64 @@ public partial class MiniModePage : ContentPage
     protected override void OnAppearing()
     {
         base.OnAppearing();
-        // OnAppearing fires during Application.AddWindow, before the WinUI platform
-        // window exists. Window.Handler is null at this point in the activation sequence.
-        // Defer window configuration to Window.HandlerChanged, which fires after
-        // ConnectHandler wires up MauiWinUIWindow as the PlatformView (HWND ready).
+        _vm.Dashboard.Providers.CollectionChanged += OnProvidersChanged;
+
         if (Window?.Handler?.PlatformView is not null)
-        {
-            _windowService.ConfigureWindow(Window, _vm.IsAlwaysOnTop, _vm.Opacity);
-        }
+            ConfigureAndResize();
         else if (Window is not null)
-        {
             Window.HandlerChanged += OnWindowHandlerReady;
-        }
+    }
+
+    protected override void OnDisappearing()
+    {
+        base.OnDisappearing();
+        _vm.Dashboard.Providers.CollectionChanged -= OnProvidersChanged;
     }
 
     private void OnWindowHandlerReady(object? sender, EventArgs e)
     {
         if (Window?.Handler?.PlatformView is null) return;
         Window.HandlerChanged -= OnWindowHandlerReady;
-        _windowService.ConfigureWindow(Window, _vm.IsAlwaysOnTop, _vm.Opacity);
+        ConfigureAndResize();
     }
 
-    private void OnSettingsToggleClicked(object sender, EventArgs e)
+    private void ConfigureAndResize()
     {
-        _vm.IsSettingsExpanded = !_vm.IsSettingsExpanded;
-        SettingsToggleButton.Text = _vm.IsSettingsExpanded ? "⚙ Settings ▲" : "⚙ Settings ▼";
+        _windowService.ConfigureWindow(Window!, _vm.IsAlwaysOnTop, _vm.Opacity);
+        _windowService.HideMainWindow();
+        _windowService.ResizeForProviderCount(_vm.Dashboard.Providers.Count);
+    }
+
+    private void OnProvidersChanged(object? sender,
+        System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        _windowService.ResizeForProviderCount(_vm.Dashboard.Providers.Count);
+    }
+
+    private void OnDragStripPressed(object sender, PointerEventArgs e)
+    {
+        _windowService.StartDrag();
+    }
+
+    private void OnSettingsClicked(object sender, EventArgs e)
+    {
+        if (_settingsWindow != null)
+        {
+            Application.Current!.CloseWindow(_settingsWindow);
+            _settingsWindow = null;
+            return;
+        }
+
+        // Pass the same _vm instance so settings and mini window share one ViewModel
+        var settingsPage = new MiniModeSettingsPage(_vm, _windowService);
+        _settingsWindow = new Window(settingsPage) { Title = "Mini Mode Settings" };
+        _settingsWindow.Destroying += (_, _) => _settingsWindow = null;
+        Application.Current!.OpenWindow(_settingsWindow);
+    }
+
+    private void OnReturnToMainClicked(object sender, EventArgs e)
+    {
+        _windowService.ShowMainWindow();
+        Application.Current!.CloseWindow(Window!);
     }
 }

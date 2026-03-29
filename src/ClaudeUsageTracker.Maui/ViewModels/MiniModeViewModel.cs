@@ -11,8 +11,6 @@ public partial class MiniModeViewModel : ObservableObject
     // AutoRefreshMinutes, IsAutoRefreshRunning, ToggleAutoRefreshCommand directly.
     public ProvidersDashboardViewModel Dashboard { get; }
 
-    [ObservableProperty] private bool _isSettingsExpanded;
-
     private double _opacity = 0.95;
     public double Opacity
     {

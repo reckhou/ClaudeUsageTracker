@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="ClaudeUsageTracker.Maui.Views.MiniModeSettingsPage"
+             Title="Mini Settings"
+             BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Black}}">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="16,14" Spacing="14">
+
+            <Label Text="Mini Mode Settings"
+                   FontSize="16" FontAttributes="Bold" />
+
+            <BoxView HeightRequest="1"
+                     Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
+
+            <!-- Transparency -->
+            <Grid ColumnDefinitions="110,*,44" ColumnSpacing="10" VerticalOptions="Center">
+                <Label Grid.Column="0" Text="Transparency" FontSize="13" VerticalOptions="Center" />
+                <Slider Grid.Column="1"
+                        Minimum="0.3" Maximum="1.0"
+                        Value="{Binding Opacity}"
+                        VerticalOptions="Center" />
+                <Label Grid.Column="2"
+                       Text="{Binding OpacityPercent}"
+                       FontSize="13" HorizontalTextAlignment="End" VerticalOptions="Center" />
+            </Grid>
+
+            <!-- Always on Top -->
+            <Grid ColumnDefinitions="*,Auto" VerticalOptions="Center">
+                <Label Grid.Column="0" Text="Always on Top" FontSize="13" VerticalOptions="Center" />
+                <Switch Grid.Column="1" IsToggled="{Binding IsAlwaysOnTop}" VerticalOptions="Center" />
+            </Grid>
+
+            <BoxView HeightRequest="1"
+                     Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
+
+            <Label Text="Auto Refresh" FontSize="14" FontAttributes="Bold" />
+
+            <!-- Auto Refresh running state (read-only indicator) -->
+            <Grid ColumnDefinitions="*,Auto" VerticalOptions="Center">
+                <Label Grid.Column="0" Text="Running" FontSize="13" VerticalOptions="Center" />
+                <Switch Grid.Column="1"
+                        IsToggled="{Binding Dashboard.IsAutoRefreshRunning}"
+                        IsEnabled="False"
+                        VerticalOptions="Center" />
+            </Grid>
+
+            <!-- Interval + start/stop button -->
+            <Grid ColumnDefinitions="Auto,60,Auto,*" ColumnSpacing="8" VerticalOptions="Center">
+                <Label Grid.Column="0" Text="Every" FontSize="13" VerticalOptions="Center" />
+                <Entry Grid.Column="1"
+                       Text="{Binding Dashboard.AutoRefreshMinutes}"
+                       Keyboard="Numeric" FontSize="13"
+                       HorizontalTextAlignment="Center" VerticalOptions="Center"
+                       IsEnabled="{Binding Dashboard.IsAutoRefreshRunning, Converter={StaticResource InvertedBoolConverter}}" />
+                <Label Grid.Column="2" Text="min" FontSize="13" VerticalOptions="Center" />
+                <Button Grid.Column="3"
+                        Text="{Binding Dashboard.AutoRefreshToggleText}"
+                        Command="{Binding Dashboard.ToggleAutoRefreshCommand}"
+                        FontSize="13" HorizontalOptions="Start" />
+            </Grid>
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>
