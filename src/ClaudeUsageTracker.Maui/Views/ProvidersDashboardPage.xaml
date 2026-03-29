@@ -8,6 +8,11 @@
 
     <Grid RowDefinitions="Auto,*" Padding="20" RowSpacing="16">
 
+        <!-- Hidden WebView for silent Claude quota fetch — lives in page layout context, not AppShell -->
+        <WebView x:Name="ClaudeSilentWebView" Grid.Row="0" Grid.RowSpan="2"
+                 IsVisible="False"
+                 Source="https://claude.ai/settings/usage" />
+
         <!-- Header -->
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
             <Label Text="Plan Usage" FontSize="22" FontAttributes="Bold" VerticalOptions="Center" />
@@ -41,11 +46,17 @@
                                     <!-- Card header -->
                                     <Grid ColumnDefinitions="*,Auto">
                                         <Label Grid.Column="0" Text="{Binding ProviderName}" FontSize="18" FontAttributes="Bold" />
-                                        <Button Grid.Column="1" Text="↻" FontSize="16"
-                                                Command="{Binding RefreshThisCommand}"
-                                                IsEnabled="{Binding IsRefreshing, Converter={StaticResource InvertedBoolConverter}}"
-                                                BackgroundColor="Transparent"
-                                                TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                        <Grid Grid.Column="1" WidthRequest="36" HeightRequest="36">
+                                            <Button Text="↻" FontSize="16"
+                                                    Command="{Binding RefreshThisCommand}"
+                                                    IsVisible="{Binding IsRefreshing, Converter={StaticResource InvertedBoolConverter}}"
+                                                    BackgroundColor="Transparent"
+                                                    TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                            <ActivityIndicator IsRunning="{Binding IsRefreshing}"
+                                                               IsVisible="{Binding IsRefreshing}"
+                                                               WidthRequest="20" HeightRequest="20"
+                                                               HorizontalOptions="Center" VerticalOptions="Center" />
+                                        </Grid>
                                     </Grid>
 
                                     <!-- Interval row -->
@@ -119,10 +130,6 @@
                                     <!-- Error -->
                                     <Label Text="{Binding ErrorMessage}" TextColor="Red" FontSize="11"
                                            IsVisible="{Binding HasError}" />
-
-                                    <!-- Loading spinner per card -->
-                                    <ActivityIndicator IsRunning="{Binding IsRefreshing}" IsVisible="{Binding IsRefreshing}"
-                                                      HorizontalOptions="Center" />
 
                                     <!-- Last updated -->
                                     <Label Text="{Binding LastUpdated, StringFormat='Updated {0}'}" FontSize="10"

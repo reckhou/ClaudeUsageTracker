@@ -14,10 +14,15 @@ public class ClaudeProWebViewPage : ContentPage
     private readonly bool _silent;
     private string? _extractedUrl;
 
+    /// <summary>Returns the root Grid for the silent WebView, to be hosted directly in the current page (avoids modal overlay).</summary>
+    public Grid SilentWebViewGrid { get; }
+
     public ClaudeProWebViewPage(bool silent = false)
     {
         _silent = silent;
         _webView = new WebView { Source = new UrlWebViewSource { Url = "https://claude.ai/settings/usage" } };
+        if (silent)
+            _webView.InputTransparent = true; // Let touches pass through to the dashboard below
         _webView.Navigated += OnNavigated;
 
         _statusLabel = new Label
@@ -77,7 +82,14 @@ public class ClaudeProWebViewPage : ContentPage
 
         if (silent)
         {
-            Content = new Grid { IsVisible = false, Children = { _webView, _statusLabel } };
+            // Host this Grid directly in the current page (not as a modal overlay) to avoid blocking input.
+            // Temporarily visible to confirm WebView CAN navigate — then we hide it after first nav.
+            SilentWebViewGrid = new Grid
+            {
+                IsVisible = true,
+                InputTransparent = true,
+                Children = { _webView, _statusLabel }
+            };
         }
         else
         {
@@ -124,20 +136,57 @@ public class ClaudeProWebViewPage : ContentPage
 
     public Task<QuotaRecord?> WaitForResultAsync(int timeoutMs = 60_000)
     {
-        _ = Task.Delay(timeoutMs).ContinueWith(_ => _tcs.TrySetResult(null));
+        System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] WaitForResultAsync started with timeout={timeoutMs}ms");
+        _ = Task.Delay(timeoutMs).ContinueWith(_ =>
+        {
+            System.Diagnostics.Debug.WriteLine("[ClaudeProWebView] Timeout fired, TCS set to null");
+            _tcs.TrySetResult(null);
+        });
         return _tcs.Task;
     }
 
     private async void OnNavigated(object? sender, WebNavigatedEventArgs e)
     {
+        System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] OnNavigated FIRED: result={e.Result}, url={e.Url}");
+        // Guard: if TCS already resolved (e.g. timeout fired first), skip all work
+        if (_tcs.Task.IsCompleted)
+        {
+            System.Diagnostics.Debug.WriteLine("[ClaudeProWebView] TCS already completed, skipping");
+            return;
+        }
+
+        try
+        {
+            await OnNavigatedCoreAsync(e);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] OnNavigated EXCEPTION: {ex.Message}");
+            if (!_tcs.Task.IsCompleted)
+                _tcs.TrySetResult(null);
+        }
+    }
+
+    private async Task OnNavigatedCoreAsync(WebNavigatedEventArgs e)
+    {
         System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] OnNavigated: result={e.Result}, url={e.Url}");
         if (e.Result != WebNavigationResult.Success)
         {
+            System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] Navigation failed: {e.Result}");
             _statusLabel.Text = $"Navigation failed: {e.Result}";
             return;
         }
-        if (!e.Url.StartsWith("https://claude.ai")) return;
-        if (_extractedUrl == e.Url) return; // Already successfully extracted from this exact URL
+        if (!e.Url.StartsWith("https://claude.ai"))
+        {
+            System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] Ignoring non-claude.ai URL: {e.Url}");
+            return;
+        }
+        if (_extractedUrl == e.Url)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] Already extracted from this URL: {e.Url}");
+            return;
+        }
+        System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] Processing claude.ai navigation to {e.Url}");
 
         _statusLabel.Text = "Fetching quota data\u2026";
         _retryBtn.IsVisible = false;

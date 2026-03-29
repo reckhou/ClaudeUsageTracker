@@ -24,6 +24,7 @@ public partial class ProvidersDashboardViewModel : ObservableObject
         _storage = storage;
     }
 
+    [RelayCommand]
     public async Task RefreshAllAsync()
     {
         HasError = false;
@@ -41,10 +42,12 @@ public partial class ProvidersDashboardViewModel : ObservableObject
         if (card == null)
         {
             card = new ProviderCardViewModel { ProviderName = provider.ProviderName };
-            Providers.Add(card);
+            // Must add to ObservableCollection on main thread to avoid UI blackouts
+            await MainThread.InvokeOnMainThreadAsync(() => Providers.Add(card));
         }
 
-        await card.RefreshAsync(provider, apiKey);
+        // Must call RefreshAsync on main thread to avoid UI blackouts (property updates must be on UI thread)
+        await MainThread.InvokeOnMainThreadAsync(() => card.RefreshAsync(provider, apiKey));
     }
 
     private async Task<string?> GetApiKeyForProvider(string provider)

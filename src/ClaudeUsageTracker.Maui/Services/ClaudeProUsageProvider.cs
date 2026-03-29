@@ -1,22 +1,20 @@
 using ClaudeUsageTracker.Core.Models;
 using ClaudeUsageTracker.Core.Services;
+using ClaudeUsageTracker.Maui.Views;
 
 namespace ClaudeUsageTracker.Maui.Services;
 
 public class ClaudeProUsageProvider : IUsageProvider
 {
-    private readonly IClaudeAiUsageService _claudeAi;
-
     public string ProviderName => "Claude";
-
-    public ClaudeProUsageProvider(IClaudeAiUsageService claudeAi)
-    {
-        _claudeAi = claudeAi;
-    }
 
     public async Task<ProviderUsageRecord?> FetchAsync(string apiKey, CancellationToken ct = default)
     {
-        var record = await _claudeAi.FetchQuotaAsync();
+        var page = ProvidersDashboardPage.Current;
+        var record = page != null
+            ? await page.FetchClaudeQuotaAsync()
+            : null;
+
         if (record == null) return null;
 
         return new ProviderUsageRecord
