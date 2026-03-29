@@ -181,7 +181,7 @@ public partial class ProviderCardViewModel : ObservableObject
             WeeklyUtilization = record.WeeklyUtilization;
             WeeklyUsed = record.WeeklyUsed;
             WeeklyTotal = record.WeeklyTotal;
-            WeeklyResetsAt = FormatResetsAt(record.WeeklyResetsAt);
+            WeeklyResetsAt = FormatWeeklyResetsAt(record.WeeklyResetsAt);
             LastUpdated = record.FetchedAt.ToLocalTime().ToString("h:mm tt");
             IsConnected = true;
         }
@@ -211,5 +211,31 @@ public partial class ProviderCardViewModel : ObservableObject
         if (diff.TotalHours < 1) return $"Resets in {(int)diff.TotalMinutes} min";
         if (diff.TotalHours < 24) return $"Resets in {(int)diff.TotalHours} hr {diff.Minutes} min";
         return $"Resets {utc.ToLocalTime():ddd h:mm tt}";
+    }
+
+    // Weekly resets are days away — show full date/time in system locale plus a countdown.
+    // Example: "29/03/2026 8:00 PM Sun (in 2 days 10 hrs 20 mins)"
+    private static string FormatWeeklyResetsAt(DateTime utc)
+    {
+        if (utc == DateTime.MinValue) return "—";
+        var diff = utc - DateTime.UtcNow;
+        if (diff <= TimeSpan.Zero) return "Resetting…";
+
+        var local   = utc.ToLocalTime();
+        var dateStr = local.ToString("d");   // short date per system locale
+        var timeStr = local.ToString("t");   // short time per system locale
+        var dayStr  = local.ToString("ddd"); // abbreviated day name
+
+        var days    = (int)diff.TotalDays;
+        var hours   = diff.Hours;
+        var minutes = diff.Minutes;
+
+        var countdown = days > 0
+            ? $"in {days} {(days == 1 ? "day" : "days")} {hours} {(hours == 1 ? "hr" : "hrs")} {minutes} {(minutes == 1 ? "min" : "mins")}"
+            : hours > 0
+                ? $"in {hours} {(hours == 1 ? "hr" : "hrs")} {minutes} {(minutes == 1 ? "min" : "mins")}"
+                : $"in {minutes} {(minutes == 1 ? "min" : "mins")}";
+
+        return $"{dateStr} {timeStr} {dayStr} ({countdown})";
     }
 }
