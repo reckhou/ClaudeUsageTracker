@@ -40,7 +40,7 @@ public static class MauiProgram
 			sp.GetRequiredService<AnthropicApiService>(),
 			sp.GetRequiredService<IUsageDataService>(),
 			sp.GetRequiredService<IClaudeAiUsageService>()));
-		builder.Services.AddTransient<ProvidersDashboardViewModel>(sp =>
+		builder.Services.AddSingleton<ProvidersDashboardViewModel>(sp =>
 			new ProvidersDashboardViewModel(
 				sp.GetRequiredService<IUsageDataService>() as UsageDataService
 					?? throw new InvalidOperationException("UsageDataService must be UsageDataService"),

@@ -9,7 +9,6 @@ namespace ClaudeUsageTracker.Maui.Views;
 public partial class ProvidersDashboardPage : ContentPage
 {
     private readonly ProvidersDashboardViewModel _vm;
-    private bool _initialLoadDone;
     private TaskCompletionSource<QuotaRecord?>? _claudeTcs;
     private string? _extractedUrl;
 
@@ -48,11 +47,23 @@ public partial class ProvidersDashboardPage : ContentPage
             System.Diagnostics.Debug.WriteLine("[ClaudeSilentWebView] First load, waiting for OnNavigated");
             ClaudeSilentWebView.IsVisible = true;
             ClaudeSilentWebView.Opacity = 0; // Hide visually — WebView still initializes and navigates
+
+            // On a new page instance (after tab switch), the WebView navigated during
+            // construction BEFORE _claudeTcs was set here, so OnNavigated fired and the
+            // handler returned early (tcs was null). Reload to force a fresh OnNavigated
+            // that fires AFTER _claudeTcs is set and can be captured.
+            try { ClaudeSilentWebView.Reload(); } catch { }
         }
 
         try
         {
-            return await _claudeTcs.Task;
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            return await _claudeTcs.Task.WaitAsync(cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            System.Diagnostics.Debug.WriteLine("[ClaudeSilentWebView] Timeout waiting for navigation");
+            return null;
         }
         finally
         {
@@ -229,8 +240,10 @@ public partial class ProvidersDashboardPage : ContentPage
     protected override async void OnAppearing()
     {
         base.OnAppearing();
-        if (_initialLoadDone) return;
-        _initialLoadDone = true;
+        // Only auto-refresh if no provider cards exist yet (first load).
+        // If providers are already populated (singleton VM persisted them), skip
+        // auto-refresh — the user can still use the Refresh All button manually.
+        if (_vm.Providers.Count > 0) return;
         try { await _vm.RefreshAllAsync(); } catch { }
     }
 }

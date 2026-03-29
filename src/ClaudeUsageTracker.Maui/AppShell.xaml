@@ -7,9 +7,9 @@
     Title="Claude Usage Tracker">
 
     <ShellContent
-        Title="Setup"
-        ContentTemplate="{DataTemplate views:SetupPage}"
-        Route="setup" />
+        Title="Providers"
+        ContentTemplate="{DataTemplate views:ProvidersDashboardPage}"
+        Route="providers" />
 
     <ShellContent
         Title="Dashboard"
@@ -17,8 +17,8 @@
         Route="dashboard" />
 
     <ShellContent
-        Title="Providers"
-        ContentTemplate="{DataTemplate views:ProvidersDashboardPage}"
-        Route="providers" />
+        Title="Setup"
+        ContentTemplate="{DataTemplate views:SetupPage}"
+        Route="setup" />
 
 </Shell>

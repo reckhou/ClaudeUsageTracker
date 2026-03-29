@@ -43,7 +43,11 @@ public partial class ProvidersDashboardViewModel : ObservableObject
         {
             card = new ProviderCardViewModel { ProviderName = provider.ProviderName };
             // Must add to ObservableCollection on main thread to avoid UI blackouts
-            await MainThread.InvokeOnMainThreadAsync(() => Providers.Add(card));
+            await MainThread.InvokeOnMainThreadAsync(() =>
+            {
+                var insertIndex = Providers.Count(p => string.Compare(p.ProviderName, card.ProviderName, StringComparison.OrdinalIgnoreCase) < 0);
+                Providers.Insert(insertIndex, card);
+            });
         }
 
         // Must call RefreshAsync on main thread to avoid UI blackouts (property updates must be on UI thread)
