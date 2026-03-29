@@ -5,7 +5,7 @@
              x:Class="ClaudeUsageTracker.Maui.Views.DashboardPage"
              Title="Claude Usage Tracker">
 
-    <Grid RowDefinitions="Auto,Auto,*,Auto" Padding="20" RowSpacing="16">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto" Padding="20" RowSpacing="16">
 
         <!-- Header -->
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto">
@@ -50,29 +50,38 @@
             </Frame>
         </Grid>
 
-        <!-- Bar Chart -->
+        <!-- Daily Cost Chart -->
         <Grid Grid.Row="2" RowDefinitions="Auto,*">
             <Label Grid.Row="0" Text="Daily Cost — Last 30 Days" FontAttributes="Bold" Margin="0,0,0,8" />
             <GraphicsView Grid.Row="1" x:Name="CostChart" HeightRequest="200" />
         </Grid>
 
-        <!-- Model Breakdown -->
-        <Grid Grid.Row="3" RowDefinitions="Auto,*" HeightRequest="200">
-            <Label Grid.Row="0" Text="Model Breakdown" FontAttributes="Bold" Margin="0,0,0,8" />
-            <CollectionView Grid.Row="1" ItemsSource="{Binding ModelBreakdown}">
-                <CollectionView.ItemTemplate>
-                    <DataTemplate>
-                        <Grid ColumnDefinitions="2*,3*,*,*" Padding="4,2">
-                            <Label Grid.Column="0" Text="{Binding Model}" FontSize="12" />
-                            <BoxView Grid.Column="1" HeightRequest="14" VerticalOptions="Center"
-                                     BackgroundColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource Primary}}"
-                                     x:Name="TokenBar" />
-                            <Label Grid.Column="2" Text="{Binding Tokens, StringFormat='{0:N0}'}" FontSize="11" HorizontalTextAlignment="End" />
-                            <Label Grid.Column="3" Text="{Binding CostUsd, StringFormat='{0:C}'}" FontSize="11" HorizontalTextAlignment="End" />
-                        </Grid>
-                    </DataTemplate>
-                </CollectionView.ItemTemplate>
-            </CollectionView>
+        <!-- Token Usage Chart -->
+        <Grid Grid.Row="3" RowDefinitions="Auto,Auto,Auto,*">
+            <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                <Label Text="Token Usage" FontAttributes="Bold" VerticalOptions="Center" />
+                <Picker Grid.Column="1"
+                        x:Name="ProviderPicker"
+                        Title="Provider"
+                        SelectedIndexChanged="OnProviderChanged"
+                        WidthRequest="140">
+                    <Picker.ItemsSource>
+                        <x:Array Type="{x:Type x:String}">
+                            <x:String>Anthropic</x:String>
+                            <x:String>MiniMaxi</x:String>
+                            <x:String>GoogleAI</x:String>
+                        </x:Array>
+                    </Picker.ItemsSource>
+                </Picker>
+            </Grid>
+
+            <StackLayout Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
+                <Button Text="24h" Command="{Binding SetTimeRangeCommand}" CommandParameter="Past24Hours" Padding="8,4" />
+                <Button Text="7d" Command="{Binding SetTimeRangeCommand}" CommandParameter="Past7Days" Padding="8,4" Margin="4,0" />
+                <Button Text="30d" Command="{Binding SetTimeRangeCommand}" CommandParameter="Past30Days" Padding="8,4" />
+            </StackLayout>
+
+            <GraphicsView Grid.Row="2" x:Name="TokenChart" HeightRequest="200" />
         </Grid>
 
     </Grid>

@@ -25,6 +25,11 @@ public partial class SetupViewModel(
     [ObservableProperty] private string _miniMaxiApiKey = "";
     [ObservableProperty] private bool _isValidatingMiniMaxi;
 
+    // Google AI section
+    [ObservableProperty] private bool _isGoogleAIConnected;
+    [ObservableProperty] private string _googleAIApiKey = "";
+    [ObservableProperty] private bool _isValidatingGoogleAI;
+
     public event Action? NavigateToDashboard;
 
     public async Task LoadAsync()
@@ -40,6 +45,10 @@ public partial class SetupViewModel(
         var miniKey = await storage.GetAsync("MiniMaxiApiKey");
         IsMiniMaxiConnected = !string.IsNullOrEmpty(miniKey);
         MiniMaxiApiKey = IsMiniMaxiConnected ? "••••••••••" : "";
+
+        var googleKey = await storage.GetAsync("GoogleAIApiKey");
+        IsGoogleAIConnected = !string.IsNullOrEmpty(googleKey);
+        GoogleAIApiKey = IsGoogleAIConnected ? "••••••••••" : "";
     }
 
     [RelayCommand]
@@ -88,6 +97,25 @@ public partial class SetupViewModel(
         await storage.RemoveAsync("MiniMaxiApiKey");
         IsMiniMaxiConnected = false;
         MiniMaxiApiKey = "";
+    }
+
+    [RelayCommand]
+    public async Task SaveGoogleAIApiKeyAsync()
+    {
+        if (string.IsNullOrWhiteSpace(GoogleAIApiKey) || GoogleAIApiKey.StartsWith("•")) return;
+        IsValidatingGoogleAI = true;
+        await storage.SetAsync("GoogleAIApiKey", GoogleAIApiKey);
+        IsGoogleAIConnected = true;
+        GoogleAIApiKey = "••••••••••";
+        IsValidatingGoogleAI = false;
+    }
+
+    [RelayCommand]
+    public async Task DisconnectGoogleAIAsync()
+    {
+        await storage.RemoveAsync("GoogleAIApiKey");
+        IsGoogleAIConnected = false;
+        GoogleAIApiKey = "";
     }
 
     [RelayCommand]

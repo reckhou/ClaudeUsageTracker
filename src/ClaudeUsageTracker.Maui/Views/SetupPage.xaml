@@ -95,6 +95,35 @@
           </VerticalStackLayout>
         </Frame>
 
+        <!-- Google AI Card -->
+        <Frame CornerRadius="10" Padding="20"
+               BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
+          <VerticalStackLayout Spacing="12">
+            <Label Text="Google AI" FontSize="16" FontAttributes="Bold" />
+            <Label Text="Tracks usage for your Google AI (Gemini) account."
+                   FontSize="12" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+
+            <Grid IsVisible="{Binding IsGoogleAIConnected, Converter={StaticResource InvertedBoolConverter}}"
+                  ColumnDefinitions="*,Auto" ColumnSpacing="8">
+              <Entry Grid.Column="0" Placeholder="AIza..." IsPassword="True"
+                     Text="{Binding GoogleAIApiKey}" />
+              <Button Grid.Column="1" Text="Connect" Command="{Binding SaveGoogleAIApiKeyCommand}"
+                      IsEnabled="{Binding IsValidatingGoogleAI, Converter={StaticResource InvertedBoolConverter}}" />
+            </Grid>
+
+            <Grid IsVisible="{Binding IsGoogleAIConnected}" ColumnDefinitions="*,Auto">
+              <Label Grid.Column="0" Text="✓ Connected" VerticalOptions="Center"
+                     TextColor="{StaticResource Primary}" />
+              <Button Grid.Column="1" Text="Disconnect" Command="{Binding DisconnectGoogleAICommand}"
+                      BackgroundColor="Transparent"
+                      TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
+                      FontSize="12" />
+            </Grid>
+
+            <ActivityIndicator IsRunning="{Binding IsValidatingGoogleAI}" IsVisible="{Binding IsValidatingGoogleAI}" />
+          </VerticalStackLayout>
+        </Frame>
+
         <Button Text="Go to Dashboard" Command="{Binding GoToDashboardCommand}"
                 HorizontalOptions="Fill" Margin="0,8,0,0" />
 

@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Net.Http;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using ClaudeUsageTracker.Core.Models;
 using ClaudeUsageTracker.Core.Services;
 
 namespace ClaudeUsageTracker.Core.ViewModels;
@@ -34,8 +35,13 @@ public partial class DashboardViewModel(
     [ObservableProperty] private string _weeklyResetsAt = "";
     [ObservableProperty] private bool _hasQuota;
 
+    // Token chart
+    [ObservableProperty] private ProviderFilter _selectedProvider = ProviderFilter.Anthropic;
+    [ObservableProperty] private TokenTimeRange _selectedTimeRange = TokenTimeRange.Past24Hours;
+    [ObservableProperty] private string _timeRangeLabel = "Past 24 Hours";
+
     public ObservableCollection<DailyUsage> DailyUsages { get; } = new();
-    public ObservableCollection<ModelUsage> ModelBreakdown { get; } = new();
+    public ObservableCollection<TokenUsage> TokenChartData { get; } = new();
 
     [RelayCommand]
     public async Task RefreshAsync()
@@ -99,6 +105,21 @@ public partial class DashboardViewModel(
         await LoadFromDbAsync();
     }
 
+    [RelayCommand]
+    public void SetTimeRange(string range)
+    {
+        if (!Enum.TryParse<TokenTimeRange>(range, out var tr)) return;
+        SelectedTimeRange = tr;
+        TimeRangeLabel = tr switch
+        {
+            TokenTimeRange.Past24Hours => "Past 24 Hours (Hourly)",
+            TokenTimeRange.Past7Days => "Past 7 Days (Daily)",
+            TokenTimeRange.Past30Days => "Past 30 Days (Daily)",
+            _ => ""
+        };
+        _ = LoadTokenChartDataAsync();
+    }
+
     private async Task LoadFromDbAsync()
     {
         var today = DateTime.UtcNow.Date;
@@ -138,8 +159,7 @@ public partial class DashboardViewModel(
             DailyUsages.Add(new DailyUsage(date, dayCost, dayTokens));
         }
 
-        // Model breakdown
-        ModelBreakdown.Clear();
+        // Top model (from Anthropic Admin API)
         var byModel = usageRecords
             .GroupBy(r => r.Model)
             .Select(g => new ModelUsage(
@@ -148,7 +168,6 @@ public partial class DashboardViewModel(
                 costRecords.Where(c => c.Description.Contains(g.Key)).Sum(c => c.CostUsd)))
             .OrderByDescending(m => m.Tokens)
             .ToList();
-        foreach (var m in byModel) ModelBreakdown.Add(m);
 
         var top = byModel.FirstOrDefault();
         TopModelName = top?.Model ?? "";
@@ -174,11 +193,54 @@ public partial class DashboardViewModel(
             WeeklyUtilization = quota.SevenDayUtilization;
             WeeklyResetsAt = FormatResetsAt(quota.SevenDayResetsAt);
         }
+
+        // Load token chart data
+        await LoadTokenChartDataAsync();
+    }
+
+    public async Task LoadTokenChartDataAsync()
+    {
+        TokenChartData.Clear();
+
+        if (SelectedProvider == ProviderFilter.Anthropic)
+        {
+            var today = DateTime.UtcNow.Date;
+            var from = SelectedTimeRange switch
+            {
+                TokenTimeRange.Past24Hours => today.AddHours(-24),
+                TokenTimeRange.Past7Days => today.AddDays(-7),
+                TokenTimeRange.Past30Days => today.AddDays(-30),
+                _ => today.AddHours(-24)
+            };
+
+            var records = await db.GetUsageAsync(from, DateTime.UtcNow);
+
+            IEnumerable<IGrouping<DateTime, UsageRecord>> grouped;
+            if (SelectedTimeRange == TokenTimeRange.Past24Hours)
+            {
+                grouped = records.GroupBy(r => r.BucketStart.Date.AddHours(r.BucketStart.Hour)).OrderBy(g => g.Key);
+            }
+            else
+            {
+                grouped = records.GroupBy(r => r.BucketStart.Date).OrderBy(g => g.Key);
+            }
+
+            foreach (var g in grouped)
+                TokenChartData.Add(new TokenUsage(g.Key, g.Sum(r => r.InputTokens + r.OutputTokens)));
+        }
+        else
+        {
+            // MiniMaxi / GoogleAI — aggregate only (current usage snapshot)
+            var allRecords = await db.GetAllProviderRecordsAsync();
+            var recordName = SelectedProvider.ToString();
+            var record = allRecords.FirstOrDefault(r => r.Provider == recordName);
+            if (record != null && record.IntervalUsed > 0)
+                TokenChartData.Add(new TokenUsage(DateTime.UtcNow, record.IntervalUsed));
+        }
     }
 
     private static string FormatResetsAt(DateTime utc)
     {
-        // Guard against DateTime.MinValue (unset because API omitted resets_at)
         if (utc == DateTime.MinValue) return "—";
         var diff = utc - DateTime.UtcNow;
         if (diff <= TimeSpan.Zero) return "Resetting\u2026";
@@ -188,5 +250,9 @@ public partial class DashboardViewModel(
     }
 }
 
+public enum ProviderFilter { Anthropic, MiniMaxi, GoogleAI }
+public enum TokenTimeRange { Past24Hours, Past7Days, Past30Days }
+
 public record DailyUsage(DateTime Date, decimal CostUsd, long Tokens);
 public record ModelUsage(string Model, long Tokens, decimal CostUsd);
+public record TokenUsage(DateTime Date, long Tokens);
