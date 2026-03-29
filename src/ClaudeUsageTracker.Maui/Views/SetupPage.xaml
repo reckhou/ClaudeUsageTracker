@@ -8,44 +8,10 @@
     <ScrollView>
       <VerticalStackLayout Padding="24" Spacing="20">
 
-        <Label Text="Claude Usage Tracker" FontSize="26" FontAttributes="Bold" HorizontalOptions="Center" />
-        <Label Text="Connect one or both sources. Both are optional."
+        <Label Text="Plan Usage Tracker" FontSize="26" FontAttributes="Bold" HorizontalOptions="Center" />
+        <Label Text="Connect one or both sources to see your quota usage."
                FontSize="13" HorizontalOptions="Center" HorizontalTextAlignment="Center"
                TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-
-        <!-- Admin API Card -->
-        <Frame CornerRadius="10" Padding="20"
-               BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
-          <VerticalStackLayout Spacing="12">
-            <Label Text="Anthropic Admin API" FontSize="16" FontAttributes="Bold" />
-            <Label Text="Tracks API billing costs and token usage across your organisation."
-                   FontSize="12" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-
-            <Grid IsVisible="{Binding IsApiConnected, Converter={StaticResource InvertedBoolConverter}}"
-                  ColumnDefinitions="*,Auto" ColumnSpacing="8">
-              <Entry Grid.Column="0" Placeholder="sk-ant-admin..." IsPassword="True"
-                     Text="{Binding AdminApiKey}" ReturnCommand="{Binding SaveApiKeyCommand}" />
-              <Button Grid.Column="1" Text="Connect" Command="{Binding SaveApiKeyCommand}"
-                      IsEnabled="{Binding IsValidatingApi, Converter={StaticResource InvertedBoolConverter}}" />
-            </Grid>
-
-            <Grid IsVisible="{Binding IsApiConnected}" ColumnDefinitions="*,Auto">
-              <Label Grid.Column="0" Text="✓ Connected" VerticalOptions="Center"
-                     TextColor="{StaticResource Primary}" />
-              <Button Grid.Column="1" Text="Disconnect" Command="{Binding DisconnectApiCommand}"
-                      BackgroundColor="Transparent"
-                      TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
-                      FontSize="12" />
-            </Grid>
-
-            <Grid IsVisible="{Binding HasApiError}" ColumnDefinitions="*,Auto">
-              <Label Grid.Column="0" Text="{Binding ApiError}" TextColor="Red" FontSize="12" />
-              <Button Grid.Column="1" Text="Copy" FontSize="11" Padding="8,4"
-                      Clicked="OnCopyApiErrorClicked" BackgroundColor="Transparent" TextColor="Red" />
-            </Grid>
-            <ActivityIndicator IsRunning="{Binding IsValidatingApi}" IsVisible="{Binding IsValidatingApi}" />
-          </VerticalStackLayout>
-        </Frame>
 
         <!-- Claude Pro Card -->
         <Frame CornerRadius="10" Padding="20"
@@ -92,35 +58,6 @@
             </Grid>
 
             <ActivityIndicator IsRunning="{Binding IsValidatingMiniMaxi}" IsVisible="{Binding IsValidatingMiniMaxi}" />
-          </VerticalStackLayout>
-        </Frame>
-
-        <!-- Google AI Card -->
-        <Frame CornerRadius="10" Padding="20"
-               BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
-          <VerticalStackLayout Spacing="12">
-            <Label Text="Google AI" FontSize="16" FontAttributes="Bold" />
-            <Label Text="Tracks usage for your Google AI (Gemini) account."
-                   FontSize="12" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-
-            <Grid IsVisible="{Binding IsGoogleAIConnected, Converter={StaticResource InvertedBoolConverter}}"
-                  ColumnDefinitions="*,Auto" ColumnSpacing="8">
-              <Entry Grid.Column="0" Placeholder="AIza..." IsPassword="True"
-                     Text="{Binding GoogleAIApiKey}" />
-              <Button Grid.Column="1" Text="Connect" Command="{Binding SaveGoogleAIApiKeyCommand}"
-                      IsEnabled="{Binding IsValidatingGoogleAI, Converter={StaticResource InvertedBoolConverter}}" />
-            </Grid>
-
-            <Grid IsVisible="{Binding IsGoogleAIConnected}" ColumnDefinitions="*,Auto">
-              <Label Grid.Column="0" Text="✓ Connected" VerticalOptions="Center"
-                     TextColor="{StaticResource Primary}" />
-              <Button Grid.Column="1" Text="Disconnect" Command="{Binding DisconnectGoogleAICommand}"
-                      BackgroundColor="Transparent"
-                      TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
-                      FontSize="12" />
-            </Grid>
-
-            <ActivityIndicator IsRunning="{Binding IsValidatingGoogleAI}" IsVisible="{Binding IsValidatingGoogleAI}" />
           </VerticalStackLayout>
         </Frame>
 

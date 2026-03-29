@@ -25,9 +25,9 @@ public partial class App : Application
         base.OnStart();
         try
         {
-            var key = await _storage.GetAsync("admin_api_key");
             var pro = await _storage.GetAsync("claude_pro_connected");
-            if (!string.IsNullOrEmpty(key) || pro == "true")
+            var mini = await _storage.GetAsync("MiniMaxiApiKey");
+            if (pro == "true" || !string.IsNullOrEmpty(mini))
                 await Shell.Current.GoToAsync("//providers");
         }
         catch { /* stay on setup page */ }
