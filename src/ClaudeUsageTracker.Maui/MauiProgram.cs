@@ -30,6 +30,10 @@ public static class MauiProgram
 			return new UsageDataService(path);
 		});
 		builder.Services.AddSingleton<IClaudeAiUsageService, ClaudeAiUsageService>();
+		builder.Services.AddSingleton<IUpdateService>(_ =>
+			new UpdateService(
+				AppInfo.VersionString,
+				quitApp: () => Application.Current?.Quit()));
 		builder.Services.AddSingleton<IUsageProvider, MiniMaxiUsageProvider>();
 		builder.Services.AddSingleton<IUsageProvider, ClaudeProUsageProvider>();
 		builder.Services.AddTransient<SetupViewModel>();
@@ -38,7 +42,8 @@ public static class MauiProgram
 				sp.GetRequiredService<IUsageDataService>() as UsageDataService
 					?? throw new InvalidOperationException("UsageDataService must be UsageDataService"),
 				sp.GetRequiredService<IEnumerable<IUsageProvider>>(),
-				sp.GetRequiredService<ISecureStorageService>()));
+				sp.GetRequiredService<ISecureStorageService>(),
+				sp.GetRequiredService<IUpdateService>()));
 		builder.Services.AddTransient<SetupPage>();
 		builder.Services.AddTransient<ProvidersDashboardPage>();
 

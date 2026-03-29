@@ -6,10 +6,10 @@
              x:Class="ClaudeUsageTracker.Maui.Views.ProvidersDashboardPage"
              Title="Providers">
 
-    <Grid RowDefinitions="Auto,Auto,*" Padding="20" RowSpacing="16">
+    <Grid RowDefinitions="Auto,Auto,Auto,*" Padding="20" RowSpacing="16">
 
         <!-- Hidden WebView for silent Claude quota fetch — lives in page layout context, not AppShell -->
-        <WebView x:Name="ClaudeSilentWebView" Grid.Row="0" Grid.RowSpan="3"
+        <WebView x:Name="ClaudeSilentWebView" Grid.Row="0" Grid.RowSpan="4"
                  IsVisible="False"
                  Source="https://claude.ai/settings/usage" />
 
@@ -29,8 +29,39 @@
             </Grid>
         </Grid>
 
+        <!-- Update Banner — Row 1, shown when update is available or actively installing -->
+        <Border Grid.Row="1"
+                IsVisible="{Binding UpdateService.ShowUpdateBanner}"
+                BackgroundColor="{AppThemeBinding Light=#1B4332, Dark=#1A2E22}"
+                StrokeThickness="1"
+                Stroke="#2D6A4F"
+                StrokeShape="RoundRectangle 8"
+                Padding="16,10">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                <VerticalStackLayout Grid.Column="0" VerticalOptions="Center" Spacing="4">
+                    <Label Text="{Binding UpdateService.BannerTitle}"
+                           FontSize="13" FontAttributes="Bold" TextColor="#81C995" />
+                    <ProgressBar IsVisible="{Binding UpdateService.IsUpdating}"
+                                 Progress="{Binding UpdateService.UpdateProgressFraction}"
+                                 ProgressColor="#4CAF50" HeightRequest="4" />
+                    <Label Text="{Binding UpdateService.ReleaseNotes}"
+                           FontSize="11"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray400}, Dark={StaticResource Gray500}}"
+                           IsVisible="{Binding UpdateService.IsUpdating, Converter={StaticResource InvertedBoolConverter}}"
+                           MaxLines="2" LineBreakMode="TailTruncation" />
+                </VerticalStackLayout>
+                <Button Grid.Column="1"
+                        Text="{Binding UpdateService.UpdateButtonText}"
+                        Command="{Binding UpdateService.ApplyUpdateCommand}"
+                        IsEnabled="{Binding UpdateService.IsUpdating, Converter={StaticResource InvertedBoolConverter}}"
+                        BackgroundColor="#4CAF50" TextColor="White"
+                        CornerRadius="6" FontSize="12" HeightRequest="36"
+                        VerticalOptions="Center" />
+            </Grid>
+        </Border>
+
         <!-- Auto-refresh controls -->
-        <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,Auto,*" ColumnSpacing="8" VerticalOptions="Center">
+        <Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,Auto,*" ColumnSpacing="8" VerticalOptions="Center">
             <Label Grid.Column="0" Text="Auto refresh every" FontSize="13" VerticalOptions="Center"
                    TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
             <Entry Grid.Column="1" Text="{Binding AutoRefreshMinutes}"
@@ -45,7 +76,7 @@
         </Grid>
 
         <!-- Provider cards list -->
-        <ScrollView Grid.Row="2">
+        <ScrollView Grid.Row="3">
             <VerticalStackLayout Spacing="12">
 
                 <!-- Empty state -->

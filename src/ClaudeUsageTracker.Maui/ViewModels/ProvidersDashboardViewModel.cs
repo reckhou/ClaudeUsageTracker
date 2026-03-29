@@ -30,11 +30,14 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<ProviderCardViewModel> Providers { get; } = [];
 
-    public ProvidersDashboardViewModel(UsageDataService db, IEnumerable<IUsageProvider> providers, ISecureStorageService storage)
+    public IUpdateService? UpdateService { get; }
+
+    public ProvidersDashboardViewModel(UsageDataService db, IEnumerable<IUsageProvider> providers, ISecureStorageService storage, IUpdateService? updateService = null)
     {
         _db = db;
         _providers = providers;
         _storage = storage;
+        UpdateService = updateService;
     }
 
     partial void OnIsAutoRefreshRunningChanged(bool value) => OnPropertyChanged(nameof(AutoRefreshToggleText));
