@@ -95,6 +95,18 @@ Write-Host "Zipping to $ZipName..." -ForegroundColor Cyan
 
 Compress-Archive -Path "$PublishDir\*" -DestinationPath $ZipPath -Force
 
+# 5b. Compute SHA256 hash for update integrity verification
+Write-Host "Computing SHA256 hash..." -ForegroundColor Cyan
+
+$sha256    = [System.Security.Cryptography.SHA256]::Create()
+$zipBytes  = [System.IO.File]::ReadAllBytes($ZipPath)
+$hashValue = [BitConverter]::ToString($sha256.ComputeHash($zipBytes)).Replace('-', '').ToLower()
+$sha256.Dispose()
+$hashPath  = $ZipPath + ".sha256"
+Set-Content -Path $hashPath -Value $hashValue -NoNewline -Encoding ASCII
+
+Write-Host "  SHA256: $hashValue" -ForegroundColor Gray
+
 # 6. Commit version bump
 Write-Host "Committing version bump..." -ForegroundColor Cyan
 
@@ -127,7 +139,11 @@ if ($LASTEXITCODE -ne 0) {
 # 9. Create GitHub Release
 Write-Host "Creating GitHub Release v$Version..." -ForegroundColor Cyan
 
-$releaseUrl = gh release create "v$Version" --title "v$Version" --notes $Notes $ZipPath
+$releaseUrl = gh release create "v$Version" `
+    --title "v$Version" `
+    --notes $Notes `
+    $ZipPath `
+    $hashPath
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error "gh release create failed"
@@ -137,4 +153,4 @@ Pop-Location
 
 Write-Host ""
 Write-Host "Release published: $releaseUrl" -ForegroundColor Green
-Write-Host "Artifact: $ZipName" -ForegroundColor Green
+Write-Host "Artifacts: $ZipName + $ZipName.sha256" -ForegroundColor Green
