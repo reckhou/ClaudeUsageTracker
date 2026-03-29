@@ -23,7 +23,7 @@
                     Text="⊞ Mini"
                     FontSize="13"
                     Clicked="OnMiniModeClicked"
-                    BackgroundColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource Primary}}"
+                    BackgroundColor="{StaticResource Primary}"
                     TextColor="White"
                     CornerRadius="6"
                     Padding="10,4"

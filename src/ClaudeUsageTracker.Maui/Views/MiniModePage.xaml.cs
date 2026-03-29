@@ -169,7 +169,6 @@ public partial class MiniModePage : ContentPage
 
     private void OnReturnToMainClicked(object sender, EventArgs e)
     {
-        // Bug 5: close the settings window before closing the mini window
         if (_settingsWindow != null)
             Application.Current!.CloseWindow(_settingsWindow);
         _windowService.ShowMainWindow();

@@ -11,30 +11,20 @@ public class MiniModeWindowService
     private double _osDpiScale  = 1.0;
     private bool   _dpiInitialized;
 
-    // ── P/Invoke (only what's needed for WndProc subclass + DPI) ─────────
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+    // ── P/Invoke ─────────────────────────────────────────────────────────
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr hWnd);
-    [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
-    private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
     [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern IntPtr DefWindowProcW(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern IntPtr CallWindowProcW(IntPtr lpPrevWndFunc, IntPtr hWnd,
-        uint Msg, IntPtr wParam, IntPtr lParam);
+    private static extern bool GetCursorPos(out POINT pt);
 
     [System.Runtime.InteropServices.StructLayout(
         System.Runtime.InteropServices.LayoutKind.Sequential)]
-    private struct RECT { public int Left, Top, Right, Bottom; }
+    private struct POINT { public int X, Y; }
 
-    // WndProc delegate — must be kept in a field to prevent GC collection while
-    // the native callback is registered on the window.
-    [System.Runtime.InteropServices.UnmanagedFunctionPointer(
-        System.Runtime.InteropServices.CallingConvention.StdCall)]
-    private delegate IntPtr WndProcDelegate(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
-    private WndProcDelegate? _wndProc;
-    private IntPtr           _oldWndProc;
+    // ── Manual drag state ────────────────────────────────────────────────
+    private bool _isDragging;
+    private int  _dragStartCursorX, _dragStartCursorY;
+    private int  _dragStartWinX,    _dragStartWinY;
 
     private static void SvcLog(string msg)
     {
@@ -49,28 +39,13 @@ public class MiniModeWindowService
         catch { }
     }
 
-    // ── Win32 constants ───────────────────────────────────────────────────
-    private const int  GWL_WNDPROC      = -4;
-    private const uint WM_NCHITTEST     = 0x0084;
-    private const int  HTCAPTION        = 2;
-
     // ── Layout constants (logical pixels at 100 % DPI) ────────────────────
-    // Actual XAML row breakdown:
-    //   Grid col=* (name+refresh) = 36
-    //   session row               = 18
-    //   weekly row                = 18
-    //   resets label              = 15
-    //   divider                   = 1
-    //   VerticalStackLayout spacing between items = 6×4 = 24
-    //   VerticalStackLayout padding = 8×2 = 16
-    // Total per provider row ≈ 128 px; use 130 for comfortable spacing.
+    // Per-provider row: name+refresh (36) + session (18) + weekly (18) +
+    //   resets label (15) + divider (1) + spacing (6×4=24) + padding (8×2=16) ≈ 128 → 130
     private const int RowHeightPx        = 130;
     private const int HeaderHeightPx     = 40;
     private const int ContainerPaddingPx = 16;  // matches VerticalStackLayout Padding="12,8"
-    private const int WindowWidthPx      = 320; // half the previous 460 for a compact widget
-    // Approximate right-side width occupied by the ⚙ Settings + ← Main buttons.
-    // WM_NCHITTEST returns HTCLIENT here so the buttons still receive clicks.
-    private const int ButtonsWidthPx     = 160;
+    private const int WindowWidthPx      = 320;
 
     private static Microsoft.UI.Windowing.AppWindow GetAppWindow(Window mauiWindow)
     {
@@ -86,7 +61,6 @@ public class MiniModeWindowService
 
     /// <summary>
     /// Configures the mini window as a frameless, always-on-top widget.
-    /// Installs a WndProc hook so the header strip acts as a native drag caption.
     /// Returns the auto-detected OS DPI scale (used to initialise the DPI slider).
     /// </summary>
     public double ConfigureWindow(Window window, bool isAlwaysOnTop, double opacity)
@@ -100,9 +74,6 @@ public class MiniModeWindowService
         _appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(id);
         SvcLog($"  _hwnd={_hwnd}, AppWindow obtained");
 
-        // Auto-detect the physical OS DPI for this window (e.g. 144 = 150 %).
-        // Only overwrite _dpiScale on the very first call — subsequent opens
-        // preserve whatever the user set via the slider.
         _osDpiScale = GetDpiForWindow(_hwnd) / 96.0;
         if (!_dpiInitialized)
         {
@@ -119,40 +90,41 @@ public class MiniModeWindowService
             p.IsAlwaysOnTop = isAlwaysOnTop;
         }
 
-        // Extend MAUI content into the title bar area — this gives the frameless
-        // look while keeping the WinUI3 compositor happy. Both SetBorderAndTitleBar
-        // and Win32 WS_CAPTION removal cause black rendering in MAUI release builds
-        // because the compositor loses track of the content area.
+        // Step 1: ExtendsContentIntoTitleBar lets the compositor render MAUI
+        // content correctly. Without this, removing the border causes a
+        // permanent black frame in release builds.
         var titleBar = _appWindow.TitleBar;
         titleBar.ExtendsContentIntoTitleBar = true;
-        titleBar.ButtonBackgroundColor       = Windows.UI.Color.FromArgb(0, 0, 0, 0);
-        titleBar.ButtonInactiveBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
-        titleBar.ButtonHoverBackgroundColor  = Windows.UI.Color.FromArgb(30, 255, 255, 255);
-        titleBar.ButtonPressedBackgroundColor = Windows.UI.Color.FromArgb(50, 255, 255, 255);
-        SvcLog("  presenter + titleBar configured (ExtendsContentIntoTitleBar)");
+        titleBar.PreferredHeightOption = Microsoft.UI.Windowing.TitleBarHeightOption.Collapsed;
+        SvcLog("  titleBar extended + collapsed");
 
-        // Subclass the WndProc so the top strip returns HTCAPTION from
-        // WM_NCHITTEST, enabling immediate native drag without any MAUI event.
-        _wndProc    = WndProcHook;
-        var ptr     = System.Runtime.InteropServices.Marshal
-                          .GetFunctionPointerForDelegate(_wndProc);
-        var result  = SetWindowLongPtr(_hwnd, GWL_WNDPROC, ptr);
-        SvcLog($"  WndProc subclass: result={result}");
-        if (result == IntPtr.Zero)
+        // Step 2: Defer border removal to the next dispatcher tick so the
+        // compositor has already rendered at least one frame of MAUI content.
+        // Calling SetBorderAndTitleBar immediately causes a black window.
+        native.DispatcherQueue.TryEnqueue(() =>
         {
-            _oldWndProc = IntPtr.Zero;
-        }
-        else
+            try
+            {
+                if (_presenter is not null)
+                    _presenter.SetBorderAndTitleBar(false, false);
+                SvcLog("  deferred SetBorderAndTitleBar(false, false) applied");
+            }
+            catch (Exception ex) { SvcLog($"  deferred border removal failed: {ex.Message}"); }
+        });
+
+        // Step 3: Manual drag via WinUI3 native pointer events.
+        // We hook Pressed/Moved/Released on the root content element.
+        // Button clicks are handled by their own controls first (marking
+        // the event as Handled), so PointerPressed only bubbles to the
+        // root for non-interactive areas — drag doesn't steal button clicks.
+        if (native.Content is Microsoft.UI.Xaml.UIElement rootContent)
         {
-            _oldWndProc = result;
+            rootContent.PointerPressed  += OnNativePointerPressed;
+            rootContent.PointerMoved    += OnNativePointerMoved;
+            rootContent.PointerReleased += OnNativePointerReleased;
+            SvcLog("  native pointer events hooked for drag");
         }
 
-        // NOTE: WS_EX_LAYERED is intentionally NOT used here. Layered windows
-        // (WS_EX_LAYERED + SetLayeredWindowAttributes) require per-pixel alpha
-        // blending which is incompatible with MAUI's WinUI child window pipeline
-        // in AOT release builds — the layered update bitmap captures a black frame
-        // before MAUI content renders, resulting in a fully black window.
-        // Opacity is controlled via MAUI's Window.Opacity property instead.
         SetOpacity(opacity);
 
         return _dpiScale;
@@ -161,49 +133,47 @@ public class MiniModeWindowService
 #endif
     }
 
-#if WINDOWS
-    /// <summary>
-    /// WndProc hook: returns HTCAPTION for the left portion of the header strip
-    /// so Windows moves the window natively on mouse-down — instant, no latency.
-    /// The right ~160 px (button zone) falls through to HTCLIENT so clicks work.
-    /// </summary>
-    private IntPtr WndProcHook(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
+    private void OnNativePointerPressed(object sender,
+        Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
     {
-        // Guard: if subclassing failed (SetWindowLongPtr returned 0), fall through
-        // to DefWindowProc so we don't crash the window.
-        if (msg == WM_NCHITTEST && _oldWndProc != IntPtr.Zero)
-        {
-            // lParam = MAKELPARAM(screenX, screenY) — signed 16-bit each
-            int   lp      = (int)(lParam.ToInt64() & 0xFFFFFFFF);
-            short screenX = (short)(lp & 0xFFFF);
-            short screenY = (short)((uint)lp >> 16);
+        if (e.Handled || _appWindow is null) return;
+        var pt = e.GetCurrentPoint(null);
+        if (!pt.Properties.IsLeftButtonPressed) return;
 
-            GetWindowRect(hWnd, out RECT rect);
-            int relX = screenX - rect.Left;
-            int relY = screenY - rect.Top;
+        GetCursorPos(out var cursor);
+        var winPos       = _appWindow.Position;
+        _dragStartCursorX = cursor.X;
+        _dragStartCursorY = cursor.Y;
+        _dragStartWinX    = winPos.X;
+        _dragStartWinY    = winPos.Y;
+        _isDragging       = true;
 
-            // Guard against uninitialized _osDpiScale (defaults to 1.0, but be safe)
-            double dpiScale = _osDpiScale > 0 ? _osDpiScale : 1.0;
-            int headerPx     = (int)(HeaderHeightPx   * dpiScale);
-            int buttonAreaPx = (int)(ButtonsWidthPx    * dpiScale);
-            int windowW      = rect.Right - rect.Left;
-
-            if (relY >= 0 && relY < headerPx && relX >= 0 && relX < windowW - buttonAreaPx)
-                return (IntPtr)HTCAPTION;
-        }
-        // Use DefWindowProc when subclassing was not applied (prevents crash on null proc).
-        if (_oldWndProc == IntPtr.Zero)
-            return DefWindowProcW(hWnd, msg, wParam, lParam);
-        return CallWindowProcW(_oldWndProc, hWnd, msg, wParam, lParam);
+        ((Microsoft.UI.Xaml.UIElement)sender).CapturePointer(e.Pointer);
+        e.Handled = true;
     }
-#endif
+
+    private void OnNativePointerMoved(object sender,
+        Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        if (!_isDragging || _appWindow is null) return;
+
+        GetCursorPos(out var cursor);
+        _appWindow.Move(new Windows.Graphics.PointInt32(
+            _dragStartWinX + cursor.X - _dragStartCursorX,
+            _dragStartWinY + cursor.Y - _dragStartCursorY));
+    }
+
+    private void OnNativePointerReleased(object sender,
+        Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        if (!_isDragging) return;
+        _isDragging = false;
+        ((Microsoft.UI.Xaml.UIElement)sender).ReleasePointerCapture(e.Pointer);
+    }
 
     public void SetOpacity(double opacity)
     {
-        // Opacity via Win32 WS_EX_LAYERED is disabled because it causes black
-        // rendering in AOT release builds (see ConfigureWindow notes). MAUI's
-        // Window class does not expose an Opacity property, so this is a no-op
-        // until a MAUI-native transparency mechanism is available.
+        // No-op — see ConfigureWindow notes about WS_EX_LAYERED.
     }
 
     public void SetAlwaysOnTop(bool alwaysOnTop)
