@@ -238,7 +238,7 @@ public partial class ProvidersDashboardPage : ContentPage
         // a second, disconnected ViewModel instance.
         var miniVm   = Handler!.MauiContext!.Services.GetRequiredService<MiniModeViewModel>();
         var miniPage = new MiniModePage(miniVm, _miniModeWindowService);
-        _miniWindow  = new Window(miniPage) { Title = "Claude Usage" };
+        _miniWindow  = new Window(miniPage) { Title = "" };
         _miniWindow.Destroying += (_, _) =>
         {
             // Ensure main window is restored even if mini was force-closed

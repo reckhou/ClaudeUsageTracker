@@ -36,7 +36,10 @@ public static class MauiProgram
 				quitApp: () => Application.Current?.Quit()));
 		builder.Services.AddSingleton<IUsageProvider, MiniMaxiUsageProvider>();
 		builder.Services.AddSingleton<IUsageProvider, ClaudeProUsageProvider>();
-		builder.Services.AddTransient<SetupViewModel>();
+		builder.Services.AddTransient<SetupViewModel>(sp =>
+			new SetupViewModel(
+				sp.GetRequiredService<ISecureStorageService>(),
+				sp.GetRequiredService<IUsageDataService>()));
 		builder.Services.AddSingleton<ProvidersDashboardViewModel>(sp =>
 			new ProvidersDashboardViewModel(
 				sp.GetRequiredService<IUsageDataService>() as UsageDataService
@@ -50,7 +53,7 @@ public static class MauiProgram
 			new ProvidersDashboardPage(
 				sp.GetRequiredService<ProvidersDashboardViewModel>(),
 				sp.GetRequiredService<MiniModeWindowService>()));
-		builder.Services.AddTransient<MiniModeViewModel>();
+		builder.Services.AddSingleton<MiniModeViewModel>();
 		builder.Services.AddTransient<MiniModePage>();
 		builder.Services.AddTransient<MiniModeSettingsPage>();
 

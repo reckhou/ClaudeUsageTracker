@@ -7,30 +7,70 @@ public class MiniModeWindowService
     private Microsoft.UI.Windowing.AppWindow? _appWindow;
     private Microsoft.UI.Windowing.OverlappedPresenter? _presenter;
     private Microsoft.UI.Windowing.AppWindow? _mainAppWindow;
+    private double _dpiScale    = 1.0;
+    private double _osDpiScale  = 1.0;
+    private bool   _dpiInitialized;
 
-    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
-    private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+    // ── P/Invoke (only what's needed for WndProc subclass + DPI) ─────────
     [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+    private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
     [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
+    private static extern uint GetDpiForWindow(IntPtr hWnd);
+    [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
+    private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
     [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern bool ReleaseCapture();
+    private static extern IntPtr DefWindowProcW(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
     [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+    private static extern IntPtr CallWindowProcW(IntPtr lpPrevWndFunc, IntPtr hWnd,
+        uint Msg, IntPtr wParam, IntPtr lParam);
 
-    private const int GWL_EXSTYLE       = -20;
-    private const int WS_EX_LAYERED     = 0x00080000;
-    private const uint LWA_ALPHA        = 0x00000002;
-    private const uint WM_NCLBUTTONDOWN = 0x00A1;
-    private const int HTCAPTION         = 2;
+    [System.Runtime.InteropServices.StructLayout(
+        System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct RECT { public int Left, Top, Right, Bottom; }
 
-    // Approximate physical-pixel measurements for auto-resize (at 100% DPI).
-    // name row + session row + weekly row + resets label + divider + padding/spacing
-    private const int RowHeightPx    = 110;
-    private const int HeaderHeightPx = 40;
-    private const int PaddingPx      = 24;
-    private const int WindowWidthPx  = 460;
+    // WndProc delegate — must be kept in a field to prevent GC collection while
+    // the native callback is registered on the window.
+    [System.Runtime.InteropServices.UnmanagedFunctionPointer(
+        System.Runtime.InteropServices.CallingConvention.StdCall)]
+    private delegate IntPtr WndProcDelegate(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+    private WndProcDelegate? _wndProc;
+    private IntPtr           _oldWndProc;
+
+    private static void SvcLog(string msg)
+    {
+        try
+        {
+            var path = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "ClaudeUsageTracker", "mini_debug.log");
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.AppendAllText(path, $"{DateTime.Now:HH:mm:ss.fff} [MiniModeWindowService] {msg}\n");
+        }
+        catch { }
+    }
+
+    // ── Win32 constants ───────────────────────────────────────────────────
+    private const int  GWL_WNDPROC      = -4;
+    private const uint WM_NCHITTEST     = 0x0084;
+    private const int  HTCAPTION        = 2;
+
+    // ── Layout constants (logical pixels at 100 % DPI) ────────────────────
+    // Actual XAML row breakdown:
+    //   Grid col=* (name+refresh) = 36
+    //   session row               = 18
+    //   weekly row                = 18
+    //   resets label              = 15
+    //   divider                   = 1
+    //   VerticalStackLayout spacing between items = 6×4 = 24
+    //   VerticalStackLayout padding = 8×2 = 16
+    // Total per provider row ≈ 128 px; use 130 for comfortable spacing.
+    private const int RowHeightPx        = 130;
+    private const int HeaderHeightPx     = 40;
+    private const int ContainerPaddingPx = 16;  // matches VerticalStackLayout Padding="12,8"
+    private const int WindowWidthPx      = 320; // half the previous 460 for a compact widget
+    // Approximate right-side width occupied by the ⚙ Settings + ← Main buttons.
+    // WM_NCHITTEST returns HTCLIENT here so the buttons still receive clicks.
+    private const int ButtonsWidthPx     = 160;
 
     private static Microsoft.UI.Windowing.AppWindow GetAppWindow(Window mauiWindow)
     {
@@ -44,54 +84,126 @@ public class MiniModeWindowService
 
     // ── Mini window setup ─────────────────────────────────────────────────
 
-    public void ConfigureWindow(Window window, bool isAlwaysOnTop, double opacity)
+    /// <summary>
+    /// Configures the mini window as a frameless, always-on-top widget.
+    /// Installs a WndProc hook so the header strip acts as a native drag caption.
+    /// Returns the auto-detected OS DPI scale (used to initialise the DPI slider).
+    /// </summary>
+    public double ConfigureWindow(Window window, bool isAlwaysOnTop, double opacity)
     {
 #if WINDOWS
+        SvcLog($"ConfigureWindow start: opacity={opacity}");
         var native = window.Handler?.PlatformView as Microsoft.UI.Xaml.Window
             ?? throw new InvalidOperationException("No native WinUI window.");
         _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(native);
         var id = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(_hwnd);
         _appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(id);
+        SvcLog($"  _hwnd={_hwnd}, AppWindow obtained");
 
-        _appWindow.Resize(new Windows.Graphics.SizeInt32(WindowWidthPx, HeaderHeightPx + PaddingPx));
+        // Auto-detect the physical OS DPI for this window (e.g. 144 = 150 %).
+        // Only overwrite _dpiScale on the very first call — subsequent opens
+        // preserve whatever the user set via the slider.
+        _osDpiScale = GetDpiForWindow(_hwnd) / 96.0;
+        if (!_dpiInitialized)
+        {
+            _dpiScale      = _osDpiScale;
+            _dpiInitialized = true;
+        }
 
         if (_appWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter p)
         {
             _presenter      = p;
             p.IsMaximizable = false;
             p.IsMinimizable = false;
-            p.IsResizable   = true;
+            p.IsResizable   = false;
             p.IsAlwaysOnTop = isAlwaysOnTop;
         }
 
-        // Extend XAML content into the title bar so our custom drag strip fills the
-        // full window surface. Make system caption buttons invisible — our custom ←
-        // and ⚙ buttons handle those roles. The invisible system close button remains
-        // as a fallback (if clicked, Destroying fires and restores the main window).
-        var tb = _appWindow.TitleBar;
-        tb.ExtendsContentIntoTitleBar      = true;
-        tb.ButtonBackgroundColor           = Microsoft.UI.Colors.Transparent;
-        tb.ButtonInactiveBackgroundColor   = Microsoft.UI.Colors.Transparent;
-        tb.ButtonForegroundColor           = Microsoft.UI.Colors.Transparent;
-        tb.ButtonInactiveForegroundColor   = Microsoft.UI.Colors.Transparent;
-        tb.ButtonHoverBackgroundColor      = Microsoft.UI.Colors.Transparent;
-        tb.ButtonHoverForegroundColor      = Microsoft.UI.Colors.Transparent;
-        tb.ButtonPressedBackgroundColor    = Microsoft.UI.Colors.Transparent;
-        tb.ButtonPressedForegroundColor    = Microsoft.UI.Colors.Transparent;
+        // Extend MAUI content into the title bar area — this gives the frameless
+        // look while keeping the WinUI3 compositor happy. Both SetBorderAndTitleBar
+        // and Win32 WS_CAPTION removal cause black rendering in MAUI release builds
+        // because the compositor loses track of the content area.
+        var titleBar = _appWindow.TitleBar;
+        titleBar.ExtendsContentIntoTitleBar = true;
+        titleBar.ButtonBackgroundColor       = Windows.UI.Color.FromArgb(0, 0, 0, 0);
+        titleBar.ButtonInactiveBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
+        titleBar.ButtonHoverBackgroundColor  = Windows.UI.Color.FromArgb(30, 255, 255, 255);
+        titleBar.ButtonPressedBackgroundColor = Windows.UI.Color.FromArgb(50, 255, 255, 255);
+        SvcLog("  presenter + titleBar configured (ExtendsContentIntoTitleBar)");
 
-        var exStyle = GetWindowLong(_hwnd, GWL_EXSTYLE);
-        SetWindowLong(_hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+        // Subclass the WndProc so the top strip returns HTCAPTION from
+        // WM_NCHITTEST, enabling immediate native drag without any MAUI event.
+        _wndProc    = WndProcHook;
+        var ptr     = System.Runtime.InteropServices.Marshal
+                          .GetFunctionPointerForDelegate(_wndProc);
+        var result  = SetWindowLongPtr(_hwnd, GWL_WNDPROC, ptr);
+        SvcLog($"  WndProc subclass: result={result}");
+        if (result == IntPtr.Zero)
+        {
+            _oldWndProc = IntPtr.Zero;
+        }
+        else
+        {
+            _oldWndProc = result;
+        }
+
+        // NOTE: WS_EX_LAYERED is intentionally NOT used here. Layered windows
+        // (WS_EX_LAYERED + SetLayeredWindowAttributes) require per-pixel alpha
+        // blending which is incompatible with MAUI's WinUI child window pipeline
+        // in AOT release builds — the layered update bitmap captures a black frame
+        // before MAUI content renders, resulting in a fully black window.
+        // Opacity is controlled via MAUI's Window.Opacity property instead.
         SetOpacity(opacity);
+
+        return _dpiScale;
+#else
+        return 1.0;
 #endif
     }
 
+#if WINDOWS
+    /// <summary>
+    /// WndProc hook: returns HTCAPTION for the left portion of the header strip
+    /// so Windows moves the window natively on mouse-down — instant, no latency.
+    /// The right ~160 px (button zone) falls through to HTCLIENT so clicks work.
+    /// </summary>
+    private IntPtr WndProcHook(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
+    {
+        // Guard: if subclassing failed (SetWindowLongPtr returned 0), fall through
+        // to DefWindowProc so we don't crash the window.
+        if (msg == WM_NCHITTEST && _oldWndProc != IntPtr.Zero)
+        {
+            // lParam = MAKELPARAM(screenX, screenY) — signed 16-bit each
+            int   lp      = (int)(lParam.ToInt64() & 0xFFFFFFFF);
+            short screenX = (short)(lp & 0xFFFF);
+            short screenY = (short)((uint)lp >> 16);
+
+            GetWindowRect(hWnd, out RECT rect);
+            int relX = screenX - rect.Left;
+            int relY = screenY - rect.Top;
+
+            // Guard against uninitialized _osDpiScale (defaults to 1.0, but be safe)
+            double dpiScale = _osDpiScale > 0 ? _osDpiScale : 1.0;
+            int headerPx     = (int)(HeaderHeightPx   * dpiScale);
+            int buttonAreaPx = (int)(ButtonsWidthPx    * dpiScale);
+            int windowW      = rect.Right - rect.Left;
+
+            if (relY >= 0 && relY < headerPx && relX >= 0 && relX < windowW - buttonAreaPx)
+                return (IntPtr)HTCAPTION;
+        }
+        // Use DefWindowProc when subclassing was not applied (prevents crash on null proc).
+        if (_oldWndProc == IntPtr.Zero)
+            return DefWindowProcW(hWnd, msg, wParam, lParam);
+        return CallWindowProcW(_oldWndProc, hWnd, msg, wParam, lParam);
+    }
+#endif
+
     public void SetOpacity(double opacity)
     {
-#if WINDOWS
-        if (_hwnd == IntPtr.Zero) return;
-        var alpha = (byte)(Math.Clamp(opacity, 0.3, 1.0) * 255);
-        SetLayeredWindowAttributes(_hwnd, 0, alpha, LWA_ALPHA);
-#endif
+        // Opacity via Win32 WS_EX_LAYERED is disabled because it causes black
+        // rendering in AOT release builds (see ConfigureWindow notes). MAUI's
+        // Window class does not expose an Opacity property, so this is a no-op
+        // until a MAUI-native transparency mechanism is available.
     }
 
     public void SetAlwaysOnTop(bool alwaysOnTop)
@@ -102,16 +214,10 @@ public class MiniModeWindowService
 #endif
     }
 
-    /// <summary>
-    /// Initiates a native window drag from a PointerPressed event on the drag strip.
-    /// ReleaseCapture drops MAUI's pointer capture so Windows can own the move loop.
-    /// </summary>
-    public void StartDrag()
+    public void SetDpiScale(double scale)
     {
 #if WINDOWS
-        if (_hwnd == IntPtr.Zero) return;
-        ReleaseCapture();
-        SendMessage(_hwnd, WM_NCLBUTTONDOWN, (IntPtr)HTCAPTION, IntPtr.Zero);
+        _dpiScale = scale;
 #endif
     }
 
@@ -122,18 +228,17 @@ public class MiniModeWindowService
     public void ResizeForProviderCount(int count)
     {
 #if WINDOWS
-        if (_appWindow is null) return;
-        var height = HeaderHeightPx + PaddingPx + Math.Max(count, 1) * RowHeightPx;
-        _appWindow.Resize(new Windows.Graphics.SizeInt32(WindowWidthPx, height));
+        if (_appWindow is null) { SvcLog($"ResizeForProviderCount: _appWindow is null, skipping"); return; }
+        var w = (int)(WindowWidthPx * _dpiScale);
+        var h = (int)((HeaderHeightPx + ContainerPaddingPx
+                       + Math.Max(count, 1) * RowHeightPx) * _dpiScale);
+        _appWindow.Resize(new Windows.Graphics.SizeInt32(w, h));
+        SvcLog($"ResizeForProviderCount: count={count}, size={w}x{h}, dpiScale={_dpiScale}");
 #endif
     }
 
     // ── Main window management ────────────────────────────────────────────
 
-    /// <summary>
-    /// Stores the main window's AppWindow reference so it can be hidden/shown later.
-    /// Call before OpenWindow(miniWindow).
-    /// </summary>
     public void SetMainWindow(Window mainWindow)
     {
 #if WINDOWS
@@ -142,7 +247,6 @@ public class MiniModeWindowService
 #endif
     }
 
-    /// <summary>Hides the main window (removes from taskbar, preserves all state).</summary>
     public void HideMainWindow()
     {
 #if WINDOWS
@@ -150,7 +254,6 @@ public class MiniModeWindowService
 #endif
     }
 
-    /// <summary>Restores the main window.</summary>
     public void ShowMainWindow()
     {
 #if WINDOWS
@@ -160,10 +263,6 @@ public class MiniModeWindowService
 
     // ── Settings window setup ─────────────────────────────────────────────
 
-    /// <summary>
-    /// Configures the settings window: small, always-on-top, positioned to the
-    /// right of the mini window (falls back to default OS placement if unavailable).
-    /// </summary>
     public void ConfigureSettingsWindow(Window settingsWindow)
     {
 #if WINDOWS
@@ -173,7 +272,7 @@ public class MiniModeWindowService
         var id   = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
         var settingsAppWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(id);
 
-        settingsAppWindow.Resize(new Windows.Graphics.SizeInt32(320, 240));
+        settingsAppWindow.Resize(new Windows.Graphics.SizeInt32(320, 290));
 
         if (_appWindow is not null)
         {

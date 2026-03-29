@@ -9,9 +9,23 @@ public partial class MiniModeSettingsPage : ContentPage
 
     public MiniModeSettingsPage(MiniModeViewModel vm, MiniModeWindowService windowService)
     {
-        InitializeComponent();
+        try { InitializeComponent(); }
+        catch (Exception ex)
+        {
+            var msg = $"[MiniModeSettingsPage] InitializeComponent FAILED: {ex}";
+            System.Diagnostics.Debug.WriteLine(msg);
+            try
+            {
+                var path = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "ClaudeUsageTracker", "mini_debug.log");
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.AppendAllText(path, $"{DateTime.Now:HH:mm:ss.fff} {msg}\n");
+            }
+            catch { }
+        }
         _windowService = windowService;
-        BindingContext = vm; // shares the same MiniModeViewModel instance as MiniModePage
+        BindingContext = vm;
     }
 
     protected override void OnAppearing()

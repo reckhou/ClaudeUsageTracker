@@ -14,6 +14,18 @@
             <BoxView HeightRequest="1"
                      Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
 
+            <!-- DPI Scale -->
+            <Grid ColumnDefinitions="110,*,44" ColumnSpacing="10" VerticalOptions="Center">
+                <Label Grid.Column="0" Text="DPI Scale" FontSize="13" VerticalOptions="Center" />
+                <Slider Grid.Column="1"
+                        Minimum="0.4" Maximum="2.0"
+                        Value="{Binding DpiScale}"
+                        VerticalOptions="Center" />
+                <Label Grid.Column="2"
+                       Text="{Binding DpiScalePercent}"
+                       FontSize="13" HorizontalTextAlignment="End" VerticalOptions="Center" />
+            </Grid>
+
             <!-- Transparency -->
             <Grid ColumnDefinitions="110,*,44" ColumnSpacing="10" VerticalOptions="Center">
                 <Label Grid.Column="0" Text="Transparency" FontSize="13" VerticalOptions="Center" />

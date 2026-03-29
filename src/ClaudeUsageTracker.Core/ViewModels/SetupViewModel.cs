@@ -5,7 +5,8 @@ using ClaudeUsageTracker.Core.Services;
 namespace ClaudeUsageTracker.Core.ViewModels;
 
 public partial class SetupViewModel(
-    ISecureStorageService storage) : ObservableObject
+    ISecureStorageService storage,
+    IUsageDataService usageData) : ObservableObject
 {
     // Claude Pro section
     [ObservableProperty] private bool _isClaudeProConnected;
@@ -20,8 +21,10 @@ public partial class SetupViewModel(
 
     public async Task LoadAsync()
     {
-        var proConnected = await storage.GetAsync("claude_pro_connected");
-        IsClaudeProConnected = proConnected == "true";
+        // Use the build-specific SQLite database as the source of truth for Claude Pro
+        // connection status, not SecureStorage (which persists across debug/release builds).
+        await usageData.InitAsync();
+        IsClaudeProConnected = await usageData.HasAnyQuotaRecordAsync();
         ClaudeProStatus = IsClaudeProConnected ? "Connected" : "Not connected";
 
         var miniKey = await storage.GetAsync("MiniMaxiApiKey");

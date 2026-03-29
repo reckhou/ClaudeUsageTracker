@@ -9,4 +9,6 @@ public interface IUsageDataService
     Task<QuotaRecord?> GetLatestQuotaAsync();
     Task UpsertProviderRecordAsync(ProviderUsageRecord record);
     Task<List<ProviderUsageRecord>> GetAllProviderRecordsAsync();
+    /// <summary>Returns true if at least one QuotaRecord exists in this build's database.</summary>
+    Task<bool> HasAnyQuotaRecordAsync();
 }

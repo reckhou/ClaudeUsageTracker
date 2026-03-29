@@ -53,6 +53,12 @@ public class UsageDataService(string dbPath) : IUsageDataService
         return await _db!.Table<ProviderUsageRecord>().ToListAsync();
     }
 
+    public async Task<bool> HasAnyQuotaRecordAsync()
+    {
+        if (_db == null) await InitAsync();
+        return await _db!.Table<QuotaRecord>().CountAsync() > 0;
+    }
+
     private void EnsureInit()
     {
         if (_db == null)

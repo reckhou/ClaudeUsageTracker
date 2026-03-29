@@ -9,40 +9,40 @@
     <Grid RowDefinitions="40,*">
 
         <!-- ═══ DRAG STRIP (replaces title bar via ExtendsContentIntoTitleBar) ═══ -->
-        <!-- Custom buttons are on the LEFT — the invisible system close button stays
-             in the top-right DWM overlay and doesn't conflict with our layout. -->
+        <!-- Title fills the left; action buttons are on the RIGHT so they don't
+             overlap the DWM invisible close button that stays top-right. -->
         <Grid Grid.Row="0"
-              ColumnDefinitions="36,36,*"
-              BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
+              ColumnDefinitions="*,Auto,Auto"
+              BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}"
+              HorizontalOptions="Fill"
+              VerticalOptions="Fill">
 
-            <!-- ← Back to main window -->
-            <Button Grid.Column="0"
-                    Text="←"
-                    FontSize="16"
-                    BackgroundColor="Transparent"
-                    TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}"
-                    Padding="0"
-                    Clicked="OnReturnToMainClicked" />
-
-            <!-- ⚙ Settings gear -->
-            <Button Grid.Column="1"
-                    Text="⚙"
-                    FontSize="15"
-                    BackgroundColor="Transparent"
-                    TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}"
-                    Padding="0"
-                    Clicked="OnSettingsClicked" />
-
-            <!-- Title + drag area (takes remaining width) -->
-            <Label Grid.Column="2"
-                   Text="Claude Usage"
+            <!-- Title + drag area (takes remaining width).
+                 Dragging is handled natively via WM_NCHITTEST in MiniModeWindowService
+                 so no gesture recognizer is needed here. -->
+            <Label Grid.Column="0"
+                   Text="Plan Usage"
                    FontSize="13" FontAttributes="Bold"
                    VerticalOptions="Center"
-                   Margin="6,0,0,0">
-                <Label.GestureRecognizers>
-                    <PointerGestureRecognizer PointerPressed="OnDragStripPressed" />
-                </Label.GestureRecognizers>
-            </Label>
+                   Margin="8,0,0,0" />
+
+            <!-- ⚙ Settings -->
+            <Button Grid.Column="1"
+                    Text="⚙ Settings"
+                    FontSize="12"
+                    BackgroundColor="Transparent"
+                    TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}"
+                    Padding="6,0"
+                    Clicked="OnSettingsClicked" />
+
+            <!-- ← Back to main window -->
+            <Button Grid.Column="2"
+                    Text="← Main"
+                    FontSize="12"
+                    BackgroundColor="Transparent"
+                    TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}"
+                    Padding="6,0"
+                    Clicked="OnReturnToMainClicked" />
 
         </Grid>
 
