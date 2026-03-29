@@ -10,9 +10,9 @@
 
 ## Progress
 
-- [ ] Task 1: Core service layer — `UpdateInfo`, `IUpdateService`, `UpdateService`
-- [ ] Task 2: ViewModel + UI — `ProvidersDashboardViewModel` integration, update banner in `ProvidersDashboardPage.xaml`, DI wiring in `MauiProgram.cs`
-- [ ] Task 3: Release pipeline — SHA256 in `release.ps1`
+- [x] Task 1: Core service layer — `UpdateInfo`, `IUpdateService`, `UpdateService`
+- [x] Task 2: ViewModel + UI — `ProvidersDashboardViewModel` integration, update banner in `ProvidersDashboardPage.xaml`, DI wiring in `MauiProgram.cs`
+- [x] Task 3: Release pipeline — SHA256 in `release.ps1`
 
 ---
 
