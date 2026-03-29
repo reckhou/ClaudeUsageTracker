@@ -16,14 +16,14 @@
         <!-- Header -->
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
             <Label Grid.Column="0" Text="Plan Usage" FontSize="22" FontAttributes="Bold" VerticalOptions="Center" />
-            <Grid Grid.Column="1" WidthRequest="44" HeightRequest="44">
-                <Button Text="↻" FontSize="18"
+            <Grid Grid.Column="1">
+                <Button Text="Refresh All" FontSize="13"
                         Command="{Binding RefreshAllCommand}"
-                        IsVisible="{Binding IsAnyRefreshing, Converter={StaticResource InvertedBoolConverter}}"
+                        IsVisible="{Binding ShowRefreshAllSpinner, Converter={StaticResource InvertedBoolConverter}}"
                         BackgroundColor="Transparent"
                         TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-                <ActivityIndicator IsRunning="{Binding IsAnyRefreshing}"
-                                   IsVisible="{Binding IsAnyRefreshing}"
+                <ActivityIndicator IsRunning="{Binding ShowRefreshAllSpinner}"
+                                   IsVisible="{Binding ShowRefreshAllSpinner}"
                                    WidthRequest="22" HeightRequest="22"
                                    HorizontalOptions="Center" VerticalOptions="Center" />
             </Grid>

@@ -17,10 +17,16 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _hasError;
     [ObservableProperty] private int _autoRefreshMinutes = 5;
     [ObservableProperty] private bool _isAutoRefreshRunning;
+    private bool _isRefreshAllRunning;
 
     public string AutoRefreshToggleText => IsAutoRefreshRunning ? "Stop" : "Start";
 
     public bool IsAnyRefreshing => Providers.Any(p => p.IsRefreshing);
+
+    // True only when Refresh All was explicitly clicked (stays true until all done),
+    // or when all individual card refresh buttons happen to be running simultaneously.
+    public bool ShowRefreshAllSpinner =>
+        _isRefreshAllRunning || (Providers.Count > 0 && Providers.All(p => p.IsRefreshing));
 
     public ObservableCollection<ProviderCardViewModel> Providers { get; } = [];
 
@@ -71,9 +77,19 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
     {
         HasError = false;
         ErrorMessage = "";
-        var tasks = _providers.Select(p => RefreshProviderAsync(p)).ToList();
-        await Task.WhenAll(tasks);
-        OnPropertyChanged(nameof(IsAnyRefreshing));
+        _isRefreshAllRunning = true;
+        OnPropertyChanged(nameof(ShowRefreshAllSpinner));
+        try
+        {
+            var tasks = _providers.Select(p => RefreshProviderAsync(p)).ToList();
+            await Task.WhenAll(tasks);
+        }
+        finally
+        {
+            _isRefreshAllRunning = false;
+            OnPropertyChanged(nameof(IsAnyRefreshing));
+            OnPropertyChanged(nameof(ShowRefreshAllSpinner));
+        }
     }
 
     private async Task RefreshProviderAsync(IUsageProvider provider)
@@ -88,7 +104,10 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
             card.PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName == nameof(ProviderCardViewModel.IsRefreshing))
+                {
                     OnPropertyChanged(nameof(IsAnyRefreshing));
+                    OnPropertyChanged(nameof(ShowRefreshAllSpinner));
+                }
             };
             // Must add to ObservableCollection on main thread to avoid UI blackouts
             await MainThread.InvokeOnMainThreadAsync(() =>
