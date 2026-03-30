@@ -48,6 +48,13 @@ public class MiniModeWindowService
         System.Runtime.InteropServices.LayoutKind.Sequential)]
     private struct POINT { public int X, Y; }
 
+    // ── Hover callbacks (used by MiniModePage for auto-hide header) ──────
+    public Action? OnPointerEntered { get; set; }
+    public Action? OnPointerExited  { get; set; }
+
+    // ── Header visibility tracking (for Y-position compensation) ─────────
+    private bool _lastHeaderVisible = true;
+
     // ── Manual drag state ────────────────────────────────────────────────
     private bool _isDragging;
     private int  _dragStartCursorX, _dragStartCursorY;
@@ -148,7 +155,9 @@ public class MiniModeWindowService
             rootContent.PointerPressed  += OnNativePointerPressed;
             rootContent.PointerMoved    += OnNativePointerMoved;
             rootContent.PointerReleased += OnNativePointerReleased;
-            SvcLog("  native pointer events hooked for drag");
+            rootContent.PointerEntered  += OnNativePointerEntered;
+            rootContent.PointerExited   += OnNativePointerExited;
+            SvcLog("  native pointer events hooked for drag + hover");
         }
 
         SetOpacity(opacity);
@@ -193,6 +202,14 @@ public class MiniModeWindowService
         ((Microsoft.UI.Xaml.UIElement)sender).ReleasePointerCapture(e.Pointer);
     }
 
+    private void OnNativePointerEntered(object sender,
+        Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        => OnPointerEntered?.Invoke();
+
+    private void OnNativePointerExited(object sender,
+        Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        => OnPointerExited?.Invoke();
+
     public void SetOpacity(double opacity)
     {
 #if WINDOWS
@@ -222,18 +239,41 @@ public class MiniModeWindowService
     }
 
     /// <summary>
-    /// Resizes the mini window height to fit the given number of provider rows.
-    /// Width stays fixed. Call whenever visible provider count changes.
+    /// Resizes using the last-known header visibility — safe to call from any context
+    /// that doesn't know the current header state (e.g. the ViewModel).
     /// </summary>
-    public void ResizeForProviderCount(int count)
+    public void ResizeForProviderCount(int count) =>
+        ResizeForProviderCount(count, _lastHeaderVisible);
+
+    /// <summary>
+    /// Resizes the mini window height to fit the given number of provider rows.
+    /// Width stays fixed. Also shifts Y when header visibility changes so content stays put.
+    /// </summary>
+    public void ResizeForProviderCount(int count, bool headerVisible)
     {
 #if WINDOWS
         if (_appWindow is null) { SvcLog($"ResizeForProviderCount: _appWindow is null, skipping"); return; }
-        var w = (int)(WindowWidthPx * _osDpiScale);
-        var h = (int)((HeaderHeightPx + ContainerPaddingPx
-                       + Math.Max(count, 1) * RowHeightPx) * _osDpiScale);
-        _appWindow.Resize(new Windows.Graphics.SizeInt32(w, h));
-        SvcLog($"ResizeForProviderCount: count={count}, size={w}x{h}, osDpi={_osDpiScale}");
+
+        var headerPx = (int)Math.Round(HeaderHeightPx * _osDpiScale);
+        var w        = (int)Math.Round(WindowWidthPx  * _osDpiScale);
+        var headerH  = headerVisible ? HeaderHeightPx : 0;
+        var h        = (int)Math.Round((headerH + ContainerPaddingPx
+                                        + Math.Max(count, 1) * RowHeightPx) * _osDpiScale);
+
+        var pos  = _appWindow.Position;
+        var newX = pos.X;
+        // Shift Y so the provider-content rows stay at the same screen position:
+        //   hiding  (true→false): top shrinks inward  → move window DOWN by header height
+        //   showing (false→true): top grows outward   → move window UP   by header height
+        var newY = pos.Y + (headerVisible == _lastHeaderVisible ? 0
+                            : headerVisible ? -headerPx : headerPx);
+
+        if (headerVisible != _lastHeaderVisible)
+            _lastHeaderVisible = headerVisible;
+
+        // SWP_NOZORDER (0x0004) | SWP_NOACTIVATE (0x0010) — atomic resize + move, no z-order change
+        SetWindowPos(_hwnd, IntPtr.Zero, newX, newY, w, h, SWP_NOZORDER | 0x0010);
+        SvcLog($"ResizeForProviderCount: count={count}, headerVisible={headerVisible}, pos=({newX},{newY}), size={w}x{h}, dpi={_osDpiScale}");
 #endif
     }
 

@@ -9,6 +9,9 @@ public partial class MiniModePage : ContentPage
     private readonly MiniModeViewModel _vm;
     private Window? _settingsWindow;
 
+    private bool _headerVisible = true;
+    private CancellationTokenSource? _hideCts;
+
     public MiniModePage(MiniModeViewModel vm, MiniModeWindowService windowService)
     {
         try { InitializeComponent(); }
@@ -75,6 +78,9 @@ public partial class MiniModePage : ContentPage
     {
         base.OnDisappearing();
         _vm.MiniProviders.CollectionChanged -= OnMiniProvidersChanged;
+        _hideCts?.Cancel();
+        _windowService.OnPointerEntered = null;
+        _windowService.OnPointerExited  = null;
     }
 
     private void OnWindowHandlerReady(object? sender, EventArgs e)
@@ -105,7 +111,7 @@ public partial class MiniModePage : ContentPage
         }
         catch (OperationCanceledException) { }
 
-        _windowService.ResizeForProviderCount(_vm.MiniProviders.Count);
+        _windowService.ResizeForProviderCount(_vm.MiniProviders.Count, _headerVisible);
     }
 
     private void ConfigureAndResize()
@@ -114,8 +120,11 @@ public partial class MiniModePage : ContentPage
         {
             WriteLog($"ConfigureAndResize: opacity={_vm.Opacity}, isAlwaysOnTop={_vm.IsAlwaysOnTop}, miniProviders={_vm.MiniProviders.Count}");
             _windowService.ConfigureWindow(Window!, _vm.IsAlwaysOnTop, _vm.Opacity);
+            _windowService.OnPointerEntered = () => MainThread.BeginInvokeOnMainThread(OnWindowHovered);
+            _windowService.OnPointerExited  = () => MainThread.BeginInvokeOnMainThread(StartHideTimer);
             _windowService.HideMainWindow();
-            _windowService.ResizeForProviderCount(_vm.MiniProviders.Count);
+            _windowService.ResizeForProviderCount(_vm.MiniProviders.Count, _headerVisible);
+            StartHideTimer();
             WriteLog("ConfigureAndResize: completed successfully");
         }
         catch (Exception ex)
@@ -126,10 +135,50 @@ public partial class MiniModePage : ContentPage
         }
     }
 
+    private void OnWindowHovered()
+    {
+        _hideCts?.Cancel();
+        ShowHeader();
+    }
+
+    private void StartHideTimer()
+    {
+        _hideCts?.Cancel();
+        _hideCts = new CancellationTokenSource();
+        var cts = _hideCts;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(2000, cts.Token);
+                MainThread.BeginInvokeOnMainThread(HideHeader);
+            }
+            catch (OperationCanceledException) { }
+        });
+    }
+
+    private void ShowHeader()
+    {
+        if (_headerVisible) return;
+        _headerVisible = true;
+        DragStrip.IsVisible = true;
+        RootGrid.RowDefinitions[0].Height = new GridLength(40);
+        _windowService.ResizeForProviderCount(_vm.MiniProviders.Count, headerVisible: true);
+    }
+
+    private void HideHeader()
+    {
+        if (!_headerVisible) return;
+        _headerVisible = false;
+        DragStrip.IsVisible = false;
+        RootGrid.RowDefinitions[0].Height = new GridLength(0);
+        _windowService.ResizeForProviderCount(_vm.MiniProviders.Count, headerVisible: false);
+    }
+
     private void OnMiniProvidersChanged(object? sender,
         System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
     {
-        _windowService.ResizeForProviderCount(_vm.MiniProviders.Count);
+        _windowService.ResizeForProviderCount(_vm.MiniProviders.Count, _headerVisible);
     }
 
     private void OnSettingsClicked(object sender, EventArgs e)

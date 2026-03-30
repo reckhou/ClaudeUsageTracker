@@ -20,7 +20,10 @@ public partial class MiniModeViewModel : ObservableObject
     /// </summary>
     public ObservableCollection<ProviderCardViewModel> MiniProviders { get; } = new();
 
-    private double _opacity = 0.95;
+    private const string OpacityPrefKey    = "mini_opacity";
+    private const string AlwaysOnTopPrefKey = "mini_always_on_top";
+
+    private double _opacity;
     public double Opacity
     {
         get => _opacity;
@@ -29,6 +32,7 @@ public partial class MiniModeViewModel : ObservableObject
             if (SetProperty(ref _opacity, Math.Clamp(value, 0.3, 1.0)))
             {
                 OnPropertyChanged(nameof(OpacityPercent));
+                Preferences.Set(OpacityPrefKey, _opacity);
                 _windowService.SetOpacity(_opacity);
             }
         }
@@ -36,14 +40,17 @@ public partial class MiniModeViewModel : ObservableObject
 
     public string OpacityPercent => $"{(int)(_opacity * 100)}%";
 
-    private bool _isAlwaysOnTop = true;
+    private bool _isAlwaysOnTop;
     public bool IsAlwaysOnTop
     {
         get => _isAlwaysOnTop;
         set
         {
             if (SetProperty(ref _isAlwaysOnTop, value))
+            {
+                Preferences.Set(AlwaysOnTopPrefKey, value);
                 _windowService.SetAlwaysOnTop(value);
+            }
         }
     }
 
@@ -51,6 +58,8 @@ public partial class MiniModeViewModel : ObservableObject
     {
         Dashboard = dashboard;
         _windowService = windowService;
+        _opacity      = Preferences.Get(OpacityPrefKey,    0.95);
+        _isAlwaysOnTop = Preferences.Get(AlwaysOnTopPrefKey, true);
         Dashboard.Providers.CollectionChanged += OnSourceProvidersChanged;
         foreach (var p in Dashboard.Providers)
             p.PropertyChanged += OnProviderPropertyChanged;

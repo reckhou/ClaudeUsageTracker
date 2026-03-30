@@ -6,10 +6,10 @@
              x:Class="ClaudeUsageTracker.Maui.Views.MiniModePage"
              BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Black}}">
 
-    <Grid RowDefinitions="40,*">
+    <Grid x:Name="RootGrid" RowDefinitions="40,*">
 
         <!-- ═══ DRAG STRIP ═══ -->
-        <Grid Grid.Row="0"
+        <Grid x:Name="DragStrip" Grid.Row="0"
               ColumnDefinitions="*,Auto,Auto"
               BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}"
               HorizontalOptions="Fill"
