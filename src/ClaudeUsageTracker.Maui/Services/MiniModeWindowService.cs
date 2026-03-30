@@ -7,15 +7,42 @@ public class MiniModeWindowService
     private Microsoft.UI.Windowing.AppWindow? _appWindow;
     private Microsoft.UI.Windowing.OverlappedPresenter? _presenter;
     private Microsoft.UI.Windowing.AppWindow? _mainAppWindow;
-    private double _dpiScale    = 1.0;
-    private double _osDpiScale  = 1.0;
-    private bool   _dpiInitialized;
+    private double _osDpiScale = 1.0;
 
     // ── P/Invoke ─────────────────────────────────────────────────────────
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr hWnd);
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern bool GetCursorPos(out POINT pt);
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetLayeredWindowAttributes(IntPtr hWnd, uint crKey, byte bAlpha, uint dwFlags);
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
+        int X, int Y, int cx, int cy, uint uFlags);
+
+    private const uint SWP_NOMOVE       = 0x0002;
+    private const uint SWP_NOSIZE       = 0x0001;
+    private const uint SWP_NOZORDER     = 0x0004;
+    private const uint SWP_FRAMECHANGED = 0x0020;
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int dwAttribute, ref int pvAttribute, int cbAttribute);
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+    private static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS pMarInset);
+
+    [System.Runtime.InteropServices.StructLayout(
+        System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct MARGINS { public int Left; public int Right; public int Top; public int Bottom; }
+
+    private const int DWMWA_BORDER_COLOR = 34;
+    private const int DWMWA_COLOR_NONE   = unchecked((int)0xFFFFFFFE);
+
+    private const int GWL_EXSTYLE   = -20;
+    private const int WS_EX_LAYERED = 0x00080000;
+    private const uint LWA_ALPHA    = 0x2;
 
     [System.Runtime.InteropServices.StructLayout(
         System.Runtime.InteropServices.LayoutKind.Sequential)]
@@ -40,11 +67,9 @@ public class MiniModeWindowService
     }
 
     // ── Layout constants (logical pixels at 100 % DPI) ────────────────────
-    // Per-provider row: name+refresh (36) + session (18) + weekly (18) +
-    //   resets label (15) + divider (1) + spacing (6×4=24) + padding (8×2=16) ≈ 128 → 130
     private const int RowHeightPx        = 130;
     private const int HeaderHeightPx     = 40;
-    private const int ContainerPaddingPx = 16;  // matches VerticalStackLayout Padding="12,8"
+    private const int ContainerPaddingPx = 16;
     private const int WindowWidthPx      = 320;
 
     private static Microsoft.UI.Windowing.AppWindow GetAppWindow(Window mauiWindow)
@@ -61,9 +86,8 @@ public class MiniModeWindowService
 
     /// <summary>
     /// Configures the mini window as a frameless, always-on-top widget.
-    /// Returns the auto-detected OS DPI scale (used to initialise the DPI slider).
     /// </summary>
-    public double ConfigureWindow(Window window, bool isAlwaysOnTop, double opacity)
+    public void ConfigureWindow(Window window, bool isAlwaysOnTop, double opacity)
     {
 #if WINDOWS
         SvcLog($"ConfigureWindow start: opacity={opacity}");
@@ -75,11 +99,6 @@ public class MiniModeWindowService
         SvcLog($"  _hwnd={_hwnd}, AppWindow obtained");
 
         _osDpiScale = GetDpiForWindow(_hwnd) / 96.0;
-        if (!_dpiInitialized)
-        {
-            _dpiScale      = _osDpiScale;
-            _dpiInitialized = true;
-        }
 
         if (_appWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter p)
         {
@@ -90,17 +109,11 @@ public class MiniModeWindowService
             p.IsAlwaysOnTop = isAlwaysOnTop;
         }
 
-        // Step 1: ExtendsContentIntoTitleBar lets the compositor render MAUI
-        // content correctly. Without this, removing the border causes a
-        // permanent black frame in release builds.
         var titleBar = _appWindow.TitleBar;
         titleBar.ExtendsContentIntoTitleBar = true;
         titleBar.PreferredHeightOption = Microsoft.UI.Windowing.TitleBarHeightOption.Collapsed;
         SvcLog("  titleBar extended + collapsed");
 
-        // Step 2: Defer border removal to the next dispatcher tick so the
-        // compositor has already rendered at least one frame of MAUI content.
-        // Calling SetBorderAndTitleBar immediately causes a black window.
         native.DispatcherQueue.TryEnqueue(() =>
         {
             try
@@ -108,15 +121,28 @@ public class MiniModeWindowService
                 if (_presenter is not null)
                     _presenter.SetBorderAndTitleBar(false, false);
                 SvcLog("  deferred SetBorderAndTitleBar(false, false) applied");
+
+                // Remove all border artifacts:
+                // 1. DWM border color → NONE
+                var noBorder = DWMWA_COLOR_NONE;
+                DwmSetWindowAttribute(_hwnd, DWMWA_BORDER_COLOR, ref noBorder, sizeof(int));
+                // 2. Extend frame into client area
+                var margins = new MARGINS { Left = -1, Right = -1, Top = -1, Bottom = -1 };
+                DwmExtendFrameIntoClientArea(_hwnd, ref margins);
+                // 3. Strip WS_CAPTION and WS_THICKFRAME from the Win32 style
+                const int GWL_STYLE      = -16;
+                const int WS_CAPTION     = 0x00C00000;
+                const int WS_THICKFRAME  = 0x00040000;
+                var style = GetWindowLong(_hwnd, GWL_STYLE);
+                SetWindowLong(_hwnd, GWL_STYLE, style & ~(WS_CAPTION | WS_THICKFRAME));
+                // 4. Force Windows to recalculate the frame
+                SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+                SvcLog("  deferred border removal complete (DWM + Win32 + FRAMECHANGED)");
             }
             catch (Exception ex) { SvcLog($"  deferred border removal failed: {ex.Message}"); }
         });
 
-        // Step 3: Manual drag via WinUI3 native pointer events.
-        // We hook Pressed/Moved/Released on the root content element.
-        // Button clicks are handled by their own controls first (marking
-        // the event as Handled), so PointerPressed only bubbles to the
-        // root for non-interactive areas — drag doesn't steal button clicks.
         if (native.Content is Microsoft.UI.Xaml.UIElement rootContent)
         {
             rootContent.PointerPressed  += OnNativePointerPressed;
@@ -126,10 +152,6 @@ public class MiniModeWindowService
         }
 
         SetOpacity(opacity);
-
-        return _dpiScale;
-#else
-        return 1.0;
 #endif
     }
 
@@ -173,7 +195,22 @@ public class MiniModeWindowService
 
     public void SetOpacity(double opacity)
     {
-        // No-op — see ConfigureWindow notes about WS_EX_LAYERED.
+#if WINDOWS
+        if (_hwnd == IntPtr.Zero) return;
+        var exStyle = GetWindowLong(_hwnd, GWL_EXSTYLE);
+        if (opacity >= 1.0)
+        {
+            // Remove layered style when fully opaque — cleaner compositing
+            SetWindowLong(_hwnd, GWL_EXSTYLE, exStyle & ~WS_EX_LAYERED);
+        }
+        else
+        {
+            // Add layered style and apply alpha. Safe to call after content renders;
+            // only called from the VM when the user adjusts the slider.
+            SetWindowLong(_hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+            SetLayeredWindowAttributes(_hwnd, 0, (byte)(opacity * 255), LWA_ALPHA);
+        }
+#endif
     }
 
     public void SetAlwaysOnTop(bool alwaysOnTop)
@@ -184,26 +221,19 @@ public class MiniModeWindowService
 #endif
     }
 
-    public void SetDpiScale(double scale)
-    {
-#if WINDOWS
-        _dpiScale = scale;
-#endif
-    }
-
     /// <summary>
     /// Resizes the mini window height to fit the given number of provider rows.
-    /// Width stays fixed. Call whenever Providers.Count changes.
+    /// Width stays fixed. Call whenever visible provider count changes.
     /// </summary>
     public void ResizeForProviderCount(int count)
     {
 #if WINDOWS
         if (_appWindow is null) { SvcLog($"ResizeForProviderCount: _appWindow is null, skipping"); return; }
-        var w = (int)(WindowWidthPx * _dpiScale);
+        var w = (int)(WindowWidthPx * _osDpiScale);
         var h = (int)((HeaderHeightPx + ContainerPaddingPx
-                       + Math.Max(count, 1) * RowHeightPx) * _dpiScale);
+                       + Math.Max(count, 1) * RowHeightPx) * _osDpiScale);
         _appWindow.Resize(new Windows.Graphics.SizeInt32(w, h));
-        SvcLog($"ResizeForProviderCount: count={count}, size={w}x{h}, dpiScale={_dpiScale}");
+        SvcLog($"ResizeForProviderCount: count={count}, size={w}x{h}, osDpi={_osDpiScale}");
 #endif
     }
 

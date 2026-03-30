@@ -42,20 +42,17 @@
         </Grid>
 
         <!-- ═══ PROVIDER LIST ═══ -->
-        <!-- Uses BindableLayout instead of ScrollView+CollectionView so pointer
-             events bubble through to the root for whole-window dragging.
-             The window auto-resizes to fit content so scrolling isn't needed. -->
         <VerticalStackLayout Grid.Row="1" Padding="12,8" Spacing="0">
 
             <!-- Empty state -->
-            <Label Text="No providers — use Refresh All in main window"
+            <Label Text="No providers visible — check Settings"
                    FontSize="13" HorizontalOptions="Center" Margin="0,16"
                    TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
-                   IsVisible="{Binding Dashboard.Providers.Count, Converter={StaticResource CountToBoolConverter}}" />
+                   IsVisible="{Binding MiniProviders.Count, Converter={StaticResource CountToBoolConverter}}" />
 
             <!-- Provider rows via BindableLayout -->
-            <VerticalStackLayout BindableLayout.ItemsSource="{Binding Dashboard.Providers}"
-                                 IsVisible="{Binding Dashboard.Providers.Count, Converter={StaticResource CountToBoolConverter}, ConverterParameter=inverse}">
+            <VerticalStackLayout BindableLayout.ItemsSource="{Binding MiniProviders}"
+                                 IsVisible="{Binding MiniProviders.Count, Converter={StaticResource CountToBoolConverter}, ConverterParameter=inverse}">
                 <BindableLayout.ItemTemplate>
                     <DataTemplate x:DataType="vm:ProviderCardViewModel">
                         <VerticalStackLayout Spacing="6" Padding="0,8,0,8">

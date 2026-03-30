@@ -1,15 +1,24 @@
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using ClaudeUsageTracker.Maui.Services;
+using Microsoft.Maui.Storage;
 
 namespace ClaudeUsageTracker.Maui.ViewModels;
 
 public partial class MiniModeViewModel : ObservableObject
 {
     private readonly MiniModeWindowService _windowService;
+    private readonly HashSet<string> _prefsLoaded = new();
 
-    // Exposes the singleton dashboard VM so XAML can bind to Providers,
-    // AutoRefreshMinutes, IsAutoRefreshRunning, ToggleAutoRefreshCommand directly.
     public ProvidersDashboardViewModel Dashboard { get; }
+
+    /// <summary>
+    /// Filtered subset of Dashboard.Providers where ShowInMiniMode is true.
+    /// MiniModePage binds to this instead of Dashboard.Providers directly.
+    /// </summary>
+    public ObservableCollection<ProviderCardViewModel> MiniProviders { get; } = new();
 
     private double _opacity = 0.95;
     public double Opacity
@@ -38,43 +47,79 @@ public partial class MiniModeViewModel : ObservableObject
         }
     }
 
-    private double _dpiScale = 0.5;
-    public double DpiScale
-    {
-        get => _dpiScale;
-        set
-        {
-            // Snap to nearest 10%
-            var snapped = Math.Clamp(Math.Round(value / 0.1) * 0.1, 0.4, 2.0);
-            if (SetProperty(ref _dpiScale, snapped))
-            {
-                OnPropertyChanged(nameof(DpiScalePercent));
-                _windowService.SetDpiScale(snapped);
-                _windowService.ResizeForProviderCount(Dashboard.Providers.Count);
-            }
-        }
-    }
-
-    public string DpiScalePercent => $"{(int)(_dpiScale * 100)}%";
-
     public MiniModeViewModel(ProvidersDashboardViewModel dashboard, MiniModeWindowService windowService)
     {
         Dashboard = dashboard;
         _windowService = windowService;
+        Dashboard.Providers.CollectionChanged += OnSourceProvidersChanged;
+        foreach (var p in Dashboard.Providers)
+            p.PropertyChanged += OnProviderPropertyChanged;
+        RebuildMiniProviders();
     }
 
-    /// <summary>
-    /// Silently syncs the DPI slider to the auto-detected OS value on first mini window open.
-    /// Skipped if the user has already moved the slider away from the 1.0 default.
-    /// </summary>
-    public void InitializeDpiScale(double detectedScale)
+    private void OnSourceProvidersChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        if (Math.Abs(_dpiScale - 1.0) < 0.01)
+        if (e.OldItems != null)
+            foreach (ProviderCardViewModel p in e.OldItems)
+                p.PropertyChanged -= OnProviderPropertyChanged;
+
+        if (e.NewItems != null)
+            foreach (ProviderCardViewModel p in e.NewItems)
+                p.PropertyChanged += OnProviderPropertyChanged;
+
+        if (e.Action == NotifyCollectionChangedAction.Reset)
+            foreach (var p in Dashboard.Providers)
+                p.PropertyChanged += OnProviderPropertyChanged;
+
+        RebuildMiniProviders();
+    }
+
+    private void OnProviderPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (sender is not ProviderCardViewModel provider) return;
+
+        if (e.PropertyName == nameof(ProviderCardViewModel.ProviderName)
+            && !string.IsNullOrEmpty(provider.ProviderName)
+            && _prefsLoaded.Add(provider.ProviderName))
         {
-            var snapped = Math.Clamp(Math.Round(detectedScale / 0.1) * 0.1, 0.6, 2.0);
-            SetProperty(ref _dpiScale, snapped);
-            OnPropertyChanged(nameof(DpiScalePercent));
-            _windowService.SetDpiScale(_dpiScale);
+            // First time this provider's name is known — load saved visibility.
+            // Temporarily unsub to avoid re-entrancy while setting ShowInMiniMode.
+            provider.PropertyChanged -= OnProviderPropertyChanged;
+            provider.ShowInMiniMode = Preferences.Get(PrefKey(provider.ProviderName), true);
+            provider.PropertyChanged += OnProviderPropertyChanged;
+            RebuildMiniProviders();
+            _windowService.ResizeForProviderCount(MiniProviders.Count);
+            return;
+        }
+
+        if (e.PropertyName == nameof(ProviderCardViewModel.ShowInMiniMode))
+        {
+            if (!string.IsNullOrEmpty(provider.ProviderName))
+                Preferences.Set(PrefKey(provider.ProviderName), provider.ShowInMiniMode);
+
+            RebuildMiniProviders();
+            _windowService.ResizeForProviderCount(MiniProviders.Count);
         }
     }
+
+    private void RebuildMiniProviders()
+    {
+        MiniProviders.Clear();
+        foreach (var p in Dashboard.Providers)
+        {
+            // Load persisted preference the first time we see a named provider.
+            // Handles the case where providers were named before this VM was created.
+            if (!string.IsNullOrEmpty(p.ProviderName) && _prefsLoaded.Add(p.ProviderName))
+            {
+                p.PropertyChanged -= OnProviderPropertyChanged;
+                p.ShowInMiniMode = Preferences.Get(PrefKey(p.ProviderName), true);
+                p.PropertyChanged += OnProviderPropertyChanged;
+            }
+
+            if (p.ShowInMiniMode)
+                MiniProviders.Add(p);
+        }
+    }
+
+    private static string PrefKey(string providerName) => $"mini_visible_{providerName}";
 }

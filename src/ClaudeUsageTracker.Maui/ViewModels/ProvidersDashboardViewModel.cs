@@ -138,6 +138,7 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
 public partial class ProviderCardViewModel : ObservableObject
 {
     [ObservableProperty] private string _providerName = "";
+    [ObservableProperty] private bool _showInMiniMode = true;
     [ObservableProperty] private int _intervalUtilization;
     [ObservableProperty] private long _intervalUsed;
     [ObservableProperty] private long _intervalTotal;

@@ -14,8 +14,6 @@ public partial class MiniModePage : ContentPage
         try { InitializeComponent(); }
         catch (Exception ex)
         {
-            // In release, Debug.WriteLine may be stripped; also write to a temp file
-            // so we can diagnose XAML init failures.
             var msg = $"[MiniModePage] InitializeComponent FAILED: {ex}";
             System.Diagnostics.Debug.WriteLine(msg);
             WriteLog(msg);
@@ -35,14 +33,12 @@ public partial class MiniModePage : ContentPage
         catch { }
     }
 
-    protected override async void OnAppearing()
+    protected override void OnAppearing()
     {
         base.OnAppearing();
-        _vm.Dashboard.Providers.CollectionChanged += OnProvidersChanged;
+        _vm.MiniProviders.CollectionChanged += OnMiniProvidersChanged;
         WriteLog("OnAppearing entered");
 
-        // Attempt initial configuration; if the handler isn't ready yet, defer to
-        // HandlerChanged so the window is never left unconfigured.
         if (TryConfigure())
         {
             WriteLog("TryConfigure succeeded");
@@ -53,10 +49,6 @@ public partial class MiniModePage : ContentPage
         Window.HandlerChanged += OnWindowHandlerReady;
     }
 
-    /// <summary>
-    /// Attempts to configure the window. Returns true if configuration succeeded and
-    /// no further action is needed; returns false if the handler wasn't ready yet.
-    /// </summary>
     private bool TryConfigure()
     {
         try
@@ -82,7 +74,7 @@ public partial class MiniModePage : ContentPage
     protected override void OnDisappearing()
     {
         base.OnDisappearing();
-        _vm.Dashboard.Providers.CollectionChanged -= OnProvidersChanged;
+        _vm.MiniProviders.CollectionChanged -= OnMiniProvidersChanged;
     }
 
     private void OnWindowHandlerReady(object? sender, EventArgs e)
@@ -92,7 +84,6 @@ public partial class MiniModePage : ContentPage
         if (!TryConfigure())
         {
             WriteLog("TryConfigure failed even after HandlerChanged — using fallback resize");
-            // Last resort: wait up to 5 s for providers then resize to whatever we have.
             _ = WaitForProvidersAndResizeAsync();
         }
         else
@@ -108,24 +99,23 @@ public partial class MiniModePage : ContentPage
         {
             await Task.Run(async () =>
             {
-                while (_vm.Dashboard.Providers.Count == 0 && !cts.Token.IsCancellationRequested)
+                while (_vm.MiniProviders.Count == 0 && !cts.Token.IsCancellationRequested)
                     await Task.Delay(100, cts.Token);
             }, cts.Token);
         }
-        catch (OperationCanceledException) { /* timeout — proceed with whatever count we have */ }
+        catch (OperationCanceledException) { }
 
-        _windowService.ResizeForProviderCount(_vm.Dashboard.Providers.Count);
+        _windowService.ResizeForProviderCount(_vm.MiniProviders.Count);
     }
 
     private void ConfigureAndResize()
     {
         try
         {
-            WriteLog($"ConfigureAndResize: opacity={_vm.Opacity}, isAlwaysOnTop={_vm.IsAlwaysOnTop}, providers={_vm.Dashboard.Providers.Count}");
-            var detectedDpi = _windowService.ConfigureWindow(Window!, _vm.IsAlwaysOnTop, _vm.Opacity);
-            _vm.InitializeDpiScale(detectedDpi);
+            WriteLog($"ConfigureAndResize: opacity={_vm.Opacity}, isAlwaysOnTop={_vm.IsAlwaysOnTop}, miniProviders={_vm.MiniProviders.Count}");
+            _windowService.ConfigureWindow(Window!, _vm.IsAlwaysOnTop, _vm.Opacity);
             _windowService.HideMainWindow();
-            _windowService.ResizeForProviderCount(_vm.Dashboard.Providers.Count);
+            _windowService.ResizeForProviderCount(_vm.MiniProviders.Count);
             WriteLog("ConfigureAndResize: completed successfully");
         }
         catch (Exception ex)
@@ -136,10 +126,10 @@ public partial class MiniModePage : ContentPage
         }
     }
 
-    private void OnProvidersChanged(object? sender,
+    private void OnMiniProvidersChanged(object? sender,
         System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
     {
-        _windowService.ResizeForProviderCount(_vm.Dashboard.Providers.Count);
+        _windowService.ResizeForProviderCount(_vm.MiniProviders.Count);
     }
 
     private void OnSettingsClicked(object sender, EventArgs e)
