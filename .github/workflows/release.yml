@@ -1,0 +1,67 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Install MAUI Windows workload
+        run: dotnet workload install maui-windows
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Publish MAUI Windows
+        run: |
+          dotnet publish src/ClaudeUsageTracker.Maui/ClaudeUsageTracker.Maui.csproj `
+            -f net9.0-windows10.0.19041.0 `
+            -c Release `
+            -p:WindowsPackageType=None `
+            -p:SelfContained=true `
+            -r win-x64 `
+            --output publish
+
+      - name: Zip and hash
+        id: artifacts
+        shell: pwsh
+        run: |
+          $version  = "${{ steps.version.outputs.VERSION }}"
+          $zipName  = "ClaudeUsageTracker-v$version-win-x64.zip"
+          $zipPath  = "publish\$zipName"
+
+          # Zip everything except any existing zip/sha256 files
+          $files = Get-ChildItem publish -File | Where-Object { $_.Extension -notin '.zip','.sha256' }
+          Compress-Archive -Path $files.FullName -DestinationPath $zipPath -Force
+
+          $hash = (Get-FileHash $zipPath -Algorithm SHA256).Hash.ToLower()
+          Set-Content -Path "$zipPath.sha256" -Value $hash -NoNewline -Encoding ASCII
+
+          echo "ZIP_PATH=$zipPath" >> $env:GITHUB_OUTPUT
+          echo "SHA_PATH=$zipPath.sha256" >> $env:GITHUB_OUTPUT
+          echo "SHA256=$hash" >> $env:GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ steps.version.outputs.VERSION }}
+          generate_release_notes: true
+          files: |
+            ${{ steps.artifacts.outputs.ZIP_PATH }}
+            ${{ steps.artifacts.outputs.SHA_PATH }}
