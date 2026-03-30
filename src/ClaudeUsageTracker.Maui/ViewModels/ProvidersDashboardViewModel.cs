@@ -12,6 +12,7 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
     private readonly IEnumerable<IUsageProvider> _providers;
     private readonly ISecureStorageService _storage;
     private System.Timers.Timer? _autoRefreshTimer;
+    private static readonly Random _jitterRng = new();
 
     [ObservableProperty] private string _errorMessage = "";
     [ObservableProperty] private bool _hasError;
@@ -53,13 +54,26 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
         {
             var minutes = Math.Clamp(AutoRefreshMinutes, 1, 60);
             AutoRefreshMinutes = minutes;
-            _autoRefreshTimer?.Dispose();
-            _autoRefreshTimer = new System.Timers.Timer(TimeSpan.FromMinutes(minutes).TotalMilliseconds);
-            _autoRefreshTimer.Elapsed += async (_, _) => await RefreshAllAsync();
-            _autoRefreshTimer.AutoReset = true;
-            _autoRefreshTimer.Start();
             IsAutoRefreshRunning = true;
+            ScheduleNextRefresh(minutes);
         }
+    }
+
+    private void ScheduleNextRefresh(int minutes)
+    {
+        _autoRefreshTimer?.Dispose();
+        var baseMs = TimeSpan.FromMinutes(minutes).TotalMilliseconds;
+        var maxJitterSeconds = Math.Min(120, minutes * 60 * 0.5);
+        var jitterMs = _jitterRng.NextDouble() * maxJitterSeconds * 1000;
+        _autoRefreshTimer = new System.Timers.Timer(baseMs + jitterMs);
+        _autoRefreshTimer.Elapsed += async (_, _) =>
+        {
+            await RefreshAllAsync();
+            if (IsAutoRefreshRunning)
+                ScheduleNextRefresh(AutoRefreshMinutes);
+        };
+        _autoRefreshTimer.AutoReset = false;
+        _autoRefreshTimer.Start();
     }
 
     private void StopAutoRefresh()
