@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ClaudeUsageTracker.Core.Models;
 using ClaudeUsageTracker.Core.Services;
+using Microsoft.Maui.Storage;
 
 namespace ClaudeUsageTracker.Maui.ViewModels;
 
@@ -16,6 +17,7 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
 
     [ObservableProperty] private string _errorMessage = "";
     [ObservableProperty] private bool _hasError;
+    private const string PrefKeyMinutes = "auto_refresh_minutes";
     [ObservableProperty] private int _autoRefreshMinutes = 5;
     [ObservableProperty] private bool _isAutoRefreshRunning;
     private bool _isRefreshAllRunning;
@@ -39,9 +41,13 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
         _providers = providers;
         _storage = storage;
         UpdateService = updateService;
+        _autoRefreshMinutes = Preferences.Get(PrefKeyMinutes, 5);
     }
 
     partial void OnIsAutoRefreshRunningChanged(bool value) => OnPropertyChanged(nameof(AutoRefreshToggleText));
+
+    partial void OnAutoRefreshMinutesChanged(int value) =>
+        Preferences.Set(PrefKeyMinutes, Math.Clamp(value, 1, 60));
 
     [RelayCommand]
     public void ToggleAutoRefresh()
