@@ -54,6 +54,7 @@ public partial class UpdateService : ObservableObject, IUpdateService
     {
         OnPropertyChanged(nameof(ShowUpdateBanner));
         OnPropertyChanged(nameof(BannerTitle));
+        ApplyUpdateCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnIsUpdatingChanged(bool value)
@@ -61,6 +62,7 @@ public partial class UpdateService : ObservableObject, IUpdateService
         OnPropertyChanged(nameof(ShowUpdateBanner));
         OnPropertyChanged(nameof(BannerTitle));
         OnPropertyChanged(nameof(UpdateButtonText));
+        ApplyUpdateCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnUpdateProgressChanged(int value)
