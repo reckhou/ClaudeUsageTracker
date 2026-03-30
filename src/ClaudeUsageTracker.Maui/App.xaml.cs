@@ -17,7 +17,8 @@ public partial class App : Application
 
     protected override Window CreateWindow(IActivationState? activationState)
     {
-        return new Window(new AppShell());
+        var ver = string.Join(".", AppInfo.VersionString.Split('.').Take(3));
+        return new Window(new AppShell()) { Title = $"Claude Usage Tracker v{ver}" };
     }
 
     protected override async void OnStart()

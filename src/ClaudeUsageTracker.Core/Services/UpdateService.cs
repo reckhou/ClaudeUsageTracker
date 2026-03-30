@@ -97,6 +97,14 @@ public partial class UpdateService : ObservableObject, IUpdateService
             if (!Version.TryParse(versionStr, out var latestVer)) return null;
             if (!Version.TryParse(_currentVersion, out var currentVer)) return null;
 
+            // Normalize to 3 components (Major.Minor.Build) before comparing.
+            // AppInfo.VersionString on Windows returns 4 parts (e.g. "1.3.3.0") while
+            // GitHub tags use 3 (e.g. "v1.3.3"). Without normalization, Version(1,3,3)
+            // has Revision=-1 which compares as less than Version(1,3,3,0).
+            static Version Trim3(Version v) => new(v.Major, v.Minor, Math.Max(v.Build, 0));
+            latestVer  = Trim3(latestVer);
+            currentVer = Trim3(currentVer);
+
             // Find .zip asset (skip .sha256 sidecar files)
             string downloadUrl = "";
             if (root.TryGetProperty("assets", out var assets))
