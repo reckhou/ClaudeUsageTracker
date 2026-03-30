@@ -61,28 +61,6 @@
           </VerticalStackLayout>
         </Frame>
 
-        <!-- Mini Mode settings — DPI slider so users can configure before
-             opening mini mode. BindingContext is set to MiniModeViewModel
-             in code-behind; x:Name is required for that assignment. -->
-        <Frame x:Name="MiniModeSection" CornerRadius="10" Padding="20"
-               BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
-          <VerticalStackLayout Spacing="12">
-            <Label Text="Mini Mode" FontSize="16" FontAttributes="Bold" />
-            <Label Text="DPI scale for the mini floating window. Set this to match your display scale if the window appears too small or too large."
-                   FontSize="12" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-            <Grid ColumnDefinitions="110,*,44" ColumnSpacing="10" VerticalOptions="Center">
-              <Label Grid.Column="0" Text="DPI Scale" FontSize="13" VerticalOptions="Center" />
-              <Slider Grid.Column="1"
-                      Minimum="0.6" Maximum="2.0"
-                      Value="{Binding DpiScale}"
-                      VerticalOptions="Center" />
-              <Label Grid.Column="2"
-                     Text="{Binding DpiScalePercent}"
-                     FontSize="13" HorizontalTextAlignment="End" VerticalOptions="Center" />
-            </Grid>
-          </VerticalStackLayout>
-        </Frame>
-
         <Button Text="Go to Dashboard" Command="{Binding GoToDashboardCommand}"
                 HorizontalOptions="Fill" Margin="0,8,0,0" />
 

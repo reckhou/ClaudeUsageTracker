@@ -8,15 +8,12 @@ public partial class SetupPage : ContentPage
 {
     private readonly SetupViewModel _vm;
 
-    public SetupPage(SetupViewModel vm, MiniModeViewModel miniModeVm)
+    public SetupPage(SetupViewModel vm)
     {
         InitializeComponent();
         _vm = vm;
         BindingContext = vm;
         vm.NavigateToDashboard += OnNavigateToDashboard;
-        // Give the mini-mode section its own binding context so sliders bind
-        // to MiniModeViewModel without changing the page's primary context.
-        MiniModeSection.BindingContext = miniModeVm;
     }
 
     protected override async void OnAppearing()

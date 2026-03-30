@@ -273,10 +273,9 @@ public partial class ProvidersDashboardPage : ContentPage
     protected override async void OnAppearing()
     {
         base.OnAppearing();
-        // Only auto-refresh if no provider cards exist yet (first load).
-        // If providers are already populated (singleton VM persisted them), skip
-        // auto-refresh — the user can still use the Refresh All button manually.
         if (_vm.Providers.Count > 0) return;
         try { await _vm.RefreshAllAsync(); } catch { }
+        if (!_vm.IsAutoRefreshRunning)
+            _vm.ToggleAutoRefresh();
     }
 }
