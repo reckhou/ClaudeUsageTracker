@@ -44,11 +44,11 @@ jobs:
         run: |
           $version  = "${{ steps.version.outputs.VERSION }}"
           $zipName  = "ClaudeUsageTracker-v$version-win-x64.zip"
-          $zipPath  = "publish\$zipName"
+          # Place zip at workspace root (not inside publish\) to avoid self-include
+          $zipPath  = $zipName
 
-          # Zip everything except any existing zip/sha256 files
-          $files = Get-ChildItem publish -File | Where-Object { $_.Extension -notin '.zip','.sha256' }
-          Compress-Archive -Path $files.FullName -DestinationPath $zipPath -Force
+          # Zip full publish directory recursively — includes subdirs (runtimes/, etc.)
+          Compress-Archive -Path "publish\*" -DestinationPath $zipPath -Force
 
           $hash = (Get-FileHash $zipPath -Algorithm SHA256).Hash.ToLower()
           Set-Content -Path "$zipPath.sha256" -Value $hash -NoNewline -Encoding ASCII
