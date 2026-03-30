@@ -25,6 +25,9 @@
     <!-- Versions -->
     <ApplicationDisplayVersion>1.3.3</ApplicationDisplayVersion>
     <ApplicationVersion>0</ApplicationVersion>
+    <!-- Wire .NET assembly version to ApplicationDisplayVersion so AppInfo.VersionString
+         returns the correct value for Windows unpackaged builds. -->
+    <Version>$(ApplicationDisplayVersion)</Version>
     <!-- To develop, package, and publish an app to the Microsoft Store, see: https://aka.ms/MauiTemplateUnpackaged -->
     <WindowsPackageType>None</WindowsPackageType>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
