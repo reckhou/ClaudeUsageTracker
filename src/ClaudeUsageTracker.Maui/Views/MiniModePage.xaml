@@ -65,7 +65,7 @@
                     <Label Grid.Column="0" FontSize="13">
                         <Label.FormattedText>
                             <FormattedString>
-                                <Span Text="Cost 24h: " />
+                                <Span Text="{Binding Dashboard.GoogleAiCard.CostLabel, StringFormat='{0}: '}" />
                                 <Span Text="{Binding Dashboard.GoogleAiCard.MiniCost}" FontAttributes="Bold" />
                             </FormattedString>
                         </Label.FormattedText>
@@ -73,7 +73,7 @@
                     <Label Grid.Column="1" FontSize="13">
                         <Label.FormattedText>
                             <FormattedString>
-                                <Span Text="Tokens 24h: " />
+                                <Span Text="{Binding Dashboard.GoogleAiCard.TokensLabel, StringFormat='{0}: '}" />
                                 <Span Text="{Binding Dashboard.GoogleAiCard.MiniTokens}" FontAttributes="Bold" />
                             </FormattedString>
                         </Label.FormattedText>

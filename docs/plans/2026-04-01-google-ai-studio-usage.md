@@ -11,7 +11,7 @@
 ## Progress
 
 - [x] Task 1: Data model + SQLite storage + WebView scraping
-- [ ] Task 2: Dashboard card, mini mode, setup UI, and DI wiring
+- [x] Task 2: Dashboard card, mini mode, setup UI, and DI wiring
 
 ---
 

@@ -156,8 +156,8 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
 
                 // Persist to SQLite by project + time range
                 await _db.InitAsync();
-                foreach (var group in records.GroupBy(r => r.ProjectId))
-                    await _db.UpsertGoogleAiRecordsAsync(group.Key, "last-1-day",
+                foreach (var group in records.GroupBy(r => new { r.ProjectId, r.TimeRange }))
+                    await _db.UpsertGoogleAiRecordsAsync(group.Key.ProjectId, group.Key.TimeRange,
                         group.ToList());
 
                 // Load back all records (covers multi-project totals)
@@ -184,6 +184,24 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
         _googleAiRefreshTimer.Elapsed += async (_, _) => await RefreshGoogleAiAsync();
         _googleAiRefreshTimer.AutoReset = true;
         _googleAiRefreshTimer.Start();
+    }
+
+    /// <summary>
+    /// Loads the last cached Google AI records from SQLite without triggering a WebView scrape.
+    /// Called at startup so the card appears immediately with stale data; a live scrape follows.
+    /// </summary>
+    public async Task LoadGoogleAiFromCacheAsync()
+    {
+        var projectIds = await GetGoogleAiProjectIdsAsync();
+        if (projectIds.Count == 0) return;
+
+        await _db.InitAsync();
+        var cached = await _db.GetGoogleAiRecordsAsync();
+        await MainThread.InvokeOnMainThreadAsync(() =>
+        {
+            GoogleAiCard.IsConnected = true;
+            GoogleAiCard.UpdateRecords(cached, projectIds);
+        });
     }
 
     public async Task<List<string>> GetGoogleAiProjectIdsAsync()

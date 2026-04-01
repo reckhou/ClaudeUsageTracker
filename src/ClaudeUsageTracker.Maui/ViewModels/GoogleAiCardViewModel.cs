@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using ClaudeUsageTracker.Core.Models;
 using Microsoft.Maui.Storage;
 
@@ -12,10 +11,21 @@ public partial class GoogleAiCardViewModel : ObservableObject
     [ObservableProperty] private ObservableCollection<string> _projects = ["All Projects"];
     [ObservableProperty] private string _selectedProject = "All Projects";
 
+    // Model filter dropdown
+    [ObservableProperty] private ObservableCollection<string> _models = ["All Models"];
+    [ObservableProperty] private string _selectedModel = "All Models";
+
+    // Time range toggle: "24h" or "7 days"
+    [ObservableProperty] private ObservableCollection<string> _timeRanges = ["24h", "7 days"];
+    [ObservableProperty] private string _selectedTimeRange = "24h";
+
     // Summary display values
-    [ObservableProperty] private string _cost24h = "—";
-    [ObservableProperty] private string _tokens24h = "—";
-    [ObservableProperty] private string _requests24h = "—";
+    [ObservableProperty] private string _costDisplay = "—";
+    [ObservableProperty] private string _costLabel = "Cost (24h)";
+    [ObservableProperty] private string _tokensDisplay = "—";
+    [ObservableProperty] private string _tokensLabel = "Tokens (24h)";
+    [ObservableProperty] private string _requestsDisplay = "—";
+    [ObservableProperty] private string _requestsLabel = "Requests (24h)";
     [ObservableProperty] private string _spendCapDisplay = "—";
     [ObservableProperty] private string _lastUpdated = "";
     [ObservableProperty] private bool _isRefreshing;
@@ -24,19 +34,18 @@ public partial class GoogleAiCardViewModel : ObservableObject
     [ObservableProperty] private bool _isConnected;
     [ObservableProperty] private bool _showInMiniMode = true;
 
-    // Per-model breakdown for the dashboard card
-    [ObservableProperty] private ObservableCollection<GoogleAiModelRow> _modelRows = [];
-
     private List<GoogleAiUsageRecord> _cachedRecords = [];
 
-    // Mini mode exposes 24h cost and tokens
-    public string MiniCost => Cost24h;
-    public string MiniTokens => Tokens24h;
+    // Mini mode exposes cost and tokens for the selected time range
+    public string MiniCost => CostDisplay;
+    public string MiniTokens => TokensDisplay;
 
     partial void OnSelectedProjectChanged(string value) => RecomputeDisplayValues();
+    partial void OnSelectedModelChanged(string value) => RecomputeDisplayValues();
+    partial void OnSelectedTimeRangeChanged(string value) => RecomputeDisplayValues();
 
-    partial void OnCost24hChanged(string value) => OnPropertyChanged(nameof(MiniCost));
-    partial void OnTokens24hChanged(string value) => OnPropertyChanged(nameof(MiniTokens));
+    partial void OnCostDisplayChanged(string value) => OnPropertyChanged(nameof(MiniCost));
+    partial void OnTokensDisplayChanged(string value) => OnPropertyChanged(nameof(MiniTokens));
 
     private const string ShowInMiniModePrefKey = "mini_visible_GoogleAI";
 
@@ -62,59 +71,84 @@ public partial class GoogleAiCardViewModel : ObservableObject
             newProjects.Add(id);
         Projects = newProjects;
 
-        // Keep selected project if still valid, otherwise reset to All
+        // Rebuild model list from all records
+        var modelNames = records.Select(r => r.ModelName).Where(m => !string.IsNullOrEmpty(m)).Distinct().OrderBy(m => m).ToList();
+        var newModels = new ObservableCollection<string> { "All Models" };
+        foreach (var m in modelNames)
+            newModels.Add(m);
+        Models = newModels;
+
+        // Keep selected values if still valid, otherwise reset
         if (!Projects.Contains(SelectedProject))
             SelectedProject = "All Projects";
-        else
-            RecomputeDisplayValues();
+        if (!Models.Contains(SelectedModel))
+            SelectedModel = "All Models";
+
+        RecomputeDisplayValues();
     }
 
     private void RecomputeDisplayValues()
     {
+        // Map UI time range to SQLite TimeRange value
+        var dbTimeRange = SelectedTimeRange == "7 days" ? "last-7-days" : "last-1-day";
+        var is24h = SelectedTimeRange == "24h";
+
+        // Update labels
+        var rangeLabel = is24h ? "24h" : "7 days";
+        CostLabel = $"Cost ({rangeLabel})";
+        TokensLabel = $"Tokens ({rangeLabel})";
+        RequestsLabel = $"Requests ({rangeLabel})";
+
+        // Filter by project
         var records = SelectedProject == "All Projects"
             ? _cachedRecords
             : _cachedRecords.Where(r => r.ProjectId == SelectedProject).ToList();
 
-        var day1 = records.Where(r => r.TimeRange == "last-1-day").ToList();
+        // Filter by time range
+        var rangeRecords = records.Where(r => r.TimeRange == dbTimeRange).ToList();
 
-        // Cost: sum of all unique projects (avoid double-counting per project by taking the
-        // max cost per project, since cost is stored at the record level but applies to all models)
-        var costByProject = day1.GroupBy(r => r.ProjectId)
-            .Select(g => g.Max(r => r.Cost))
-            .Sum();
-        var totalTokens = day1.Sum(r => r.InputTokens);
-        var totalRequests = day1.Sum(r => r.RequestCount);
+        // Filter by model for tokens/requests display
+        var modelRecords = SelectedModel == "All Models"
+            ? rangeRecords
+            : rangeRecords.Where(r => r.ModelName == SelectedModel).ToList();
 
-        // Pick currency + spend cap from first record
-        var first = day1.FirstOrDefault();
+        var totalTokens = modelRecords.Sum(r => r.InputTokens);
+        var totalRequests = modelRecords.Sum(r => r.RequestCount);
+
+        TokensDisplay = totalTokens > 0 ? FormatTokens(totalTokens) : "—";
+        RequestsDisplay = totalRequests > 0 ? $"{totalRequests:N0}" : "—";
+
+        // Cost: for 24h use SpendCapUsed as rough proxy; for 7 days use Cost from spend page
+        var first = rangeRecords.FirstOrDefault();
         var currency = first?.Currency ?? "";
 
-        Cost24h = costByProject > 0 ? $"{currency}{costByProject:F2}" : "—";
-        Tokens24h = totalTokens > 0 ? FormatTokens(totalTokens) : "—";
-        Requests24h = totalRequests > 0 ? $"{totalRequests:N0}" : "—";
+        if (is24h)
+        {
+            // Use spend cap usage as the 24h cost proxy
+            var capUsed = rangeRecords.GroupBy(r => r.ProjectId)
+                .Select(g => g.Max(r => r.SpendCapUsed))
+                .Sum();
+            CostDisplay = capUsed > 0 ? $"{currency}{capUsed:F2}" : "—";
+        }
+        else
+        {
+            // Use actual cost from spend page for 7 days
+            var cost = rangeRecords.GroupBy(r => r.ProjectId)
+                .Select(g => g.Max(r => r.Cost))
+                .Sum();
+            CostDisplay = cost > 0 ? $"{currency}{cost:F2}" : "—";
+        }
 
-        // Spend cap: sum across projects
-        var capUsed = day1.GroupBy(r => r.ProjectId).Select(g => g.Max(r => r.SpendCapUsed)).Sum();
-        var capLimit = day1.GroupBy(r => r.ProjectId).Select(g => g.Max(r => r.SpendCapLimit)).Sum();
-        SpendCapDisplay = (capUsed > 0 || capLimit > 0)
-            ? $"{currency}{capUsed:F2} / {currency}{capLimit:F2}"
+        // Spend cap display (use any records — spend cap is the same across time ranges)
+        var capUsedTotal = records.GroupBy(r => r.ProjectId).Select(g => g.Max(r => r.SpendCapUsed)).Sum();
+        var capLimitTotal = records.GroupBy(r => r.ProjectId).Select(g => g.Max(r => r.SpendCapLimit)).Sum();
+        var capCurrency = records.FirstOrDefault()?.Currency ?? currency;
+        SpendCapDisplay = (capUsedTotal > 0 || capLimitTotal > 0)
+            ? $"{capCurrency}{capUsedTotal:F2} / {capCurrency}{capLimitTotal:F2}"
             : "—";
 
-        // Per-model rows (aggregate across projects if "All Projects")
-        var modelGroups = day1.GroupBy(r => r.ModelName)
-            .Select(g => new GoogleAiModelRow
-            {
-                ModelName = g.Key,
-                Requests = $"{g.Sum(r => r.RequestCount):N0}",
-                InputTokens = FormatTokens(g.Sum(r => r.InputTokens))
-            })
-            .OrderByDescending(r => long.TryParse(r.Requests.Replace(",", ""), out var n) ? n : 0)
-            .ToList();
-
-        ModelRows = new ObservableCollection<GoogleAiModelRow>(modelGroups);
-
-        if (day1.Count > 0)
-            LastUpdated = day1.Max(r => r.FetchedAt).ToLocalTime().ToString("h:mm tt");
+        if (rangeRecords.Count > 0)
+            LastUpdated = rangeRecords.Max(r => r.FetchedAt).ToLocalTime().ToString("h:mm tt");
     }
 
     private static string FormatTokens(long tokens)
@@ -126,11 +160,4 @@ public partial class GoogleAiCardViewModel : ObservableObject
             return $"{tokens / 1_000.0:F1}K";
         return tokens.ToString("N0");
     }
-}
-
-public class GoogleAiModelRow
-{
-    public string ModelName { get; set; } = "";
-    public string Requests { get; set; } = "";
-    public string InputTokens { get; set; } = "";
 }

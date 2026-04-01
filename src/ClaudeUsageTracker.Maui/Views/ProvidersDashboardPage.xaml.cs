@@ -296,18 +296,18 @@ public partial class ProvidersDashboardPage : ContentPage
     protected override async void OnAppearing()
     {
         base.OnAppearing();
+
+        // Show Google AI card immediately from cached SQLite data (no WebView scrape needed).
+        await _vm.LoadGoogleAiFromCacheAsync();
+
         if (_vm.Providers.Count > 0) return;
+        // RefreshAllAsync already calls RefreshGoogleAiAsync internally — no need to call it again
         try { await _vm.RefreshAllAsync(); } catch { }
         if (!_vm.IsAutoRefreshRunning)
             _vm.ToggleAutoRefresh();
 
-        // Start Google AI 30-min auto-refresh if connected
         var googleAiProjects = await _vm.GetGoogleAiProjectIdsAsync();
         if (googleAiProjects.Count > 0)
-        {
-            // Load existing records from SQLite to populate the card immediately
-            await _vm.RefreshGoogleAiAsync();
             _vm.StartGoogleAiAutoRefresh();
-        }
     }
 }

@@ -19,7 +19,12 @@ public class GoogleAiWebViewPage : ContentPage
     private ScrapePhase _phase;
     private readonly List<GoogleAiUsageRecord> _allRecords = [];
 
+    // We only scrape the 7-day view — it gives daily columns.
+    // 24h = most recent day column; 7d = sum of all columns.
+    private const string UsageTimeRange = "last-7-days";
+
     private TaskCompletionSource<List<GoogleAiUsageRecord>?>? _tcs;
+    private Button? _retryBtn;
 
     public Grid SilentWebViewGrid { get; }
 
@@ -56,15 +61,17 @@ public class GoogleAiWebViewPage : ContentPage
             var cancelBtn = new Button { Text = "Cancel" };
             cancelBtn.Clicked += (_, _) => _tcs?.TrySetResult(null);
 
-            var retryBtn = new Button
+            _retryBtn = new Button
             {
                 Text = "I\u2019ve logged in \u2014 Retry",
                 FontSize = 13,
-                Padding = new Thickness(16, 8)
+                Padding = new Thickness(16, 8),
+                IsVisible = false
             };
-            retryBtn.Clicked += (_, _) =>
+            _retryBtn.Clicked += (_, _) =>
             {
                 if (_tcs == null || _projectIds.Count == 0) return;
+                _retryBtn.IsVisible = false;
                 _statusLabel.Text = "Retrying\u2026";
                 _phase = ScrapePhase.UsagePage;
                 _currentProjectIndex = 0;
@@ -78,7 +85,7 @@ public class GoogleAiWebViewPage : ContentPage
                 Spacing = 8
             };
             controlsStack.Children.Add(_statusLabel);
-            controlsStack.Children.Add(retryBtn);
+            controlsStack.Children.Add(_retryBtn);
             controlsStack.Children.Add(cancelBtn);
 
             var rootGrid = new Grid
@@ -120,7 +127,7 @@ public class GoogleAiWebViewPage : ContentPage
 
     private void NavigateToUsagePage(string projectId)
     {
-        var url = $"https://aistudio.google.com/usage?timeRange=last-1-day&project={projectId}";
+        var url = $"https://aistudio.google.com/usage?timeRange={UsageTimeRange}&project={projectId}";
         System.Diagnostics.Debug.WriteLine($"[GoogleAiWebView] Navigating to usage: {url}");
         _statusLabel.Text = $"Loading usage for {projectId}\u2026";
         _webView.Source = new UrlWebViewSource { Url = url };
@@ -128,7 +135,8 @@ public class GoogleAiWebViewPage : ContentPage
 
     private void NavigateToSpendPage(string projectId)
     {
-        var url = $"https://aistudio.google.com/spend?project={projectId}";
+        // Spend page with last-7-days to get 7-day cost
+        var url = $"https://aistudio.google.com/spend?timeRange={UsageTimeRange}&project={projectId}";
         System.Diagnostics.Debug.WriteLine($"[GoogleAiWebView] Navigating to spend: {url}");
         _statusLabel.Text = $"Loading spend for {projectId}\u2026";
         _webView.Source = new UrlWebViewSource { Url = url };
@@ -187,8 +195,10 @@ public class GoogleAiWebViewPage : ContentPage
     private async Task ScrapeUsagePageAsync(Microsoft.Web.WebView2.Core.CoreWebView2? coreWV2)
     {
         var projectId = _projectIds[_currentProjectIndex];
-        System.Diagnostics.Debug.WriteLine($"[GoogleAiWebView] Scraping usage for {projectId}");
+        System.Diagnostics.Debug.WriteLine($"[GoogleAiWebView] Scraping usage (7-day view) for {projectId}");
 
+        // Extract per-day column values from the 7-day usage tables.
+        // Each model row returns an array of daily values (one per column).
         const string js = """
             (async () => {
                 try {
@@ -236,16 +246,19 @@ public class GoogleAiWebViewPage : ContentPage
         if (string.IsNullOrEmpty(raw) || raw == "null")
         {
             System.Diagnostics.Debug.WriteLine($"[GoogleAiWebView] No usage data for {projectId}");
-            if (_silent) { AdvanceToNextProjectOrFinish(); return; }
+            if (_silent) { AdvanceToNextProject(); return; }
             _statusLabel.Text = "Not signed in — log in above then tap Retry.";
+            if (_retryBtn != null) _retryBtn.IsVisible = true;
             return;
         }
 
-        var records = ParseUsagePage(raw, projectId);
+        // Parse the 7-day table into two sets of records:
+        // "last-1-day" = most recent day column, "last-7-days" = sum of all columns
+        var records = ParseUsagePage7Day(raw, projectId);
         _allRecords.AddRange(records);
         System.Diagnostics.Debug.WriteLine($"[GoogleAiWebView] Parsed {records.Count} records for {projectId}");
 
-        // Now navigate to spend page for same project
+        // Navigate to spend page for same project
         _phase = ScrapePhase.SpendPage;
         NavigateToSpendPage(projectId);
     }
@@ -284,21 +297,24 @@ public class GoogleAiWebViewPage : ContentPage
             var spendInfo = ParseSpendPage(raw);
             if (spendInfo != null)
             {
-                // Apply spend info to all records for this project (last-1-day range)
+                // Apply spend info to ALL records for this project (both last-1-day and last-7-days).
+                // Cost goes on 7-day records; spend cap goes on all.
                 foreach (var r in _allRecords.Where(r => r.ProjectId == projectId))
                 {
-                    r.Cost = spendInfo.Cost;
                     r.SpendCapUsed = spendInfo.CapUsed;
                     r.SpendCapLimit = spendInfo.CapLimit;
                     r.Currency = spendInfo.Currency;
+                    // Only set cost on 7-day records (spend page cost = 7-day cost)
+                    if (r.TimeRange == "last-7-days")
+                        r.Cost = spendInfo.Cost;
                 }
             }
         }
 
-        AdvanceToNextProjectOrFinish();
+        AdvanceToNextProject();
     }
 
-    private void AdvanceToNextProjectOrFinish()
+    private void AdvanceToNextProject()
     {
         _currentProjectIndex++;
         if (_currentProjectIndex < _projectIds.Count)
@@ -379,7 +395,12 @@ public class GoogleAiWebViewPage : ContentPage
         return raw;
     }
 
-    private static List<GoogleAiUsageRecord> ParseUsagePage(string json, string projectId)
+    /// <summary>
+    /// Parses the 7-day usage table into two sets of records per model:
+    /// "last-1-day" = most recent day column that has data,
+    /// "last-7-days" = sum of all day columns.
+    /// </summary>
+    private static List<GoogleAiUsageRecord> ParseUsagePage7Day(string json, string projectId)
     {
         var records = new List<GoogleAiUsageRecord>();
         try
@@ -389,19 +410,18 @@ public class GoogleAiWebViewPage : ContentPage
             if (!root.TryGetProperty("ok", out _)) return records;
             if (!root.TryGetProperty("data", out var data)) return records;
 
-            // Build a lookup: modelName -> inputTokens from the inputTokens table
-            var tokensByModel = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+            // Build per-model lookups: modelName -> (total7d, lastDay) for tokens
+            var tokens7dByModel = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+            var tokens1dByModel = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
             if (data.TryGetProperty("inputTokens", out var tokensArr))
             {
                 foreach (var row in tokensArr.EnumerateArray())
                 {
                     var label = row.TryGetProperty("label", out var l) ? l.GetString() ?? "" : "";
                     if (string.IsNullOrEmpty(label)) continue;
-                    long total = 0;
-                    if (row.TryGetProperty("values", out var vals))
-                        foreach (var v in vals.EnumerateArray())
-                            total += ParseTokenValue(v.GetString() ?? "");
-                    tokensByModel[label] = total;
+                    var (total, lastDay) = SumAndLastDay(row, isTokens: true);
+                    tokens7dByModel[label] = total;
+                    tokens1dByModel[label] = lastDay;
                 }
             }
 
@@ -411,22 +431,30 @@ public class GoogleAiWebViewPage : ContentPage
                 {
                     var label = row.TryGetProperty("label", out var l) ? l.GetString() ?? "" : "";
                     if (string.IsNullOrEmpty(label)) continue;
-                    long totalRequests = 0;
-                    if (row.TryGetProperty("values", out var vals))
-                        foreach (var v in vals.EnumerateArray())
-                        {
-                            if (long.TryParse(v.GetString()?.Trim(), out var n))
-                                totalRequests += n;
-                        }
+                    var (totalReq7d, lastDayReq) = SumAndLastDay(row, isTokens: false);
 
-                    tokensByModel.TryGetValue(label, out var tokens);
+                    tokens7dByModel.TryGetValue(label, out var tok7d);
+                    tokens1dByModel.TryGetValue(label, out var tok1d);
+
+                    // 7-day record
+                    records.Add(new GoogleAiUsageRecord
+                    {
+                        ProjectId = projectId,
+                        ModelName = label,
+                        TimeRange = "last-7-days",
+                        RequestCount = totalReq7d,
+                        InputTokens = tok7d,
+                        FetchedAt = DateTime.UtcNow
+                    });
+
+                    // 24h record (most recent day column)
                     records.Add(new GoogleAiUsageRecord
                     {
                         ProjectId = projectId,
                         ModelName = label,
                         TimeRange = "last-1-day",
-                        RequestCount = totalRequests,
-                        InputTokens = tokens,
+                        RequestCount = lastDayReq,
+                        InputTokens = tok1d,
                         FetchedAt = DateTime.UtcNow
                     });
                 }
@@ -434,9 +462,46 @@ public class GoogleAiWebViewPage : ContentPage
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[GoogleAiWebView] ParseUsagePage EXCEPTION: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[GoogleAiWebView] ParseUsagePage7Day EXCEPTION: {ex.Message}");
         }
         return records;
+    }
+
+    /// <summary>
+    /// Given a table row's "values" array (daily columns), returns (sumOfAll, mostRecentDayWithData).
+    /// Scans from right to left to find the most recent non-zero column.
+    /// </summary>
+    private static (long total, long lastDay) SumAndLastDay(System.Text.Json.JsonElement row, bool isTokens)
+    {
+        long total = 0;
+        long lastDay = 0;
+        bool foundLastDay = false;
+
+        if (!row.TryGetProperty("values", out var vals)) return (0, 0);
+
+        // Collect all values into a list so we can scan right-to-left for last day
+        var values = new List<long>();
+        foreach (var v in vals.EnumerateArray())
+        {
+            var text = v.GetString() ?? "";
+            long parsed = isTokens ? ParseTokenValue(text) : (long.TryParse(text.Trim(), out var n) ? n : ParseTokenValue(text));
+            values.Add(parsed);
+            total += parsed;
+        }
+
+        // Find the most recent (rightmost) day that has data
+        for (int i = values.Count - 1; i >= 0; i--)
+        {
+            if (values[i] > 0)
+            {
+                lastDay = values[i];
+                foundLastDay = true;
+                break;
+            }
+        }
+
+        // If no non-zero day found, lastDay stays 0
+        return (total, lastDay);
     }
 
     private static GoogleAiSpendInfo? ParseSpendPage(string json)
