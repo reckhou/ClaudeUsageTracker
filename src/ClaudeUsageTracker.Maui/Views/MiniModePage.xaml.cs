@@ -111,7 +111,7 @@ public partial class MiniModePage : ContentPage
         }
         catch (OperationCanceledException) { }
 
-        _windowService.ResizeForProviderCount(_vm.MiniProviders.Count, _headerVisible);
+        _windowService.ResizeForProviderCount(_vm.MiniProviders.Count, _headerVisible, _vm.Dashboard.GoogleAiCard.ShowInMiniMode);
     }
 
     private void ConfigureAndResize()
@@ -123,7 +123,7 @@ public partial class MiniModePage : ContentPage
             _windowService.OnPointerEntered = () => MainThread.BeginInvokeOnMainThread(OnWindowHovered);
             _windowService.OnPointerExited  = () => MainThread.BeginInvokeOnMainThread(StartHideTimer);
             _windowService.HideMainWindow();
-            _windowService.ResizeForProviderCount(_vm.MiniProviders.Count, _headerVisible);
+            _windowService.ResizeForProviderCount(_vm.MiniProviders.Count, _headerVisible, _vm.Dashboard.GoogleAiCard.ShowInMiniMode);
             StartHideTimer();
             WriteLog("ConfigureAndResize: completed successfully");
         }
@@ -163,7 +163,7 @@ public partial class MiniModePage : ContentPage
         _headerVisible = true;
         DragStrip.IsVisible = true;
         RootGrid.RowDefinitions[0].Height = new GridLength(40);
-        _windowService.ResizeForProviderCount(_vm.MiniProviders.Count, headerVisible: true);
+        _windowService.ResizeForProviderCount(_vm.MiniProviders.Count, headerVisible: true, _vm.Dashboard.GoogleAiCard.ShowInMiniMode);
     }
 
     private void HideHeader()
@@ -172,13 +172,13 @@ public partial class MiniModePage : ContentPage
         _headerVisible = false;
         DragStrip.IsVisible = false;
         RootGrid.RowDefinitions[0].Height = new GridLength(0);
-        _windowService.ResizeForProviderCount(_vm.MiniProviders.Count, headerVisible: false);
+        _windowService.ResizeForProviderCount(_vm.MiniProviders.Count, headerVisible: false, _vm.Dashboard.GoogleAiCard.ShowInMiniMode);
     }
 
     private void OnMiniProvidersChanged(object? sender,
         System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
     {
-        _windowService.ResizeForProviderCount(_vm.MiniProviders.Count, _headerVisible);
+        _windowService.ResizeForProviderCount(_vm.MiniProviders.Count, _headerVisible, _vm.Dashboard.GoogleAiCard.ShowInMiniMode);
     }
 
     private void OnSettingsClicked(object sender, EventArgs e)

@@ -78,6 +78,7 @@ public class MiniModeWindowService
     private const int HeaderHeightPx     = 40;
     private const int ContainerPaddingPx = 16;
     private const int WindowWidthPx      = 320;
+    private const int GoogleAiRowPx      = 80; // Google AI mini row height
 
     private static Microsoft.UI.Windowing.AppWindow GetAppWindow(Window mauiWindow)
     {
@@ -242,14 +243,21 @@ public class MiniModeWindowService
     /// Resizes using the last-known header visibility — safe to call from any context
     /// that doesn't know the current header state (e.g. the ViewModel).
     /// </summary>
+    public void ResizeForProviderCount(int count, bool includeGoogleAi) =>
+        ResizeForProviderCount(count, _lastHeaderVisible, includeGoogleAi);
+
+    /// <summary>
+    /// Resizes using the last-known header visibility — safe to call from any context
+    /// that doesn't know the current header state (e.g. the ViewModel).
+    /// </summary>
     public void ResizeForProviderCount(int count) =>
-        ResizeForProviderCount(count, _lastHeaderVisible);
+        ResizeForProviderCount(count, _lastHeaderVisible, false);
 
     /// <summary>
     /// Resizes the mini window height to fit the given number of provider rows.
     /// Width stays fixed. Also shifts Y when header visibility changes so content stays put.
     /// </summary>
-    public void ResizeForProviderCount(int count, bool headerVisible)
+    public void ResizeForProviderCount(int count, bool headerVisible, bool includeGoogleAi)
     {
 #if WINDOWS
         if (_appWindow is null) { SvcLog($"ResizeForProviderCount: _appWindow is null, skipping"); return; }
@@ -257,8 +265,10 @@ public class MiniModeWindowService
         var headerPx = (int)Math.Round(HeaderHeightPx * _osDpiScale);
         var w        = (int)Math.Round(WindowWidthPx  * _osDpiScale);
         var headerH  = headerVisible ? HeaderHeightPx : 0;
+        var googleAiH = includeGoogleAi ? GoogleAiRowPx : 0;
         var h        = (int)Math.Round((headerH + ContainerPaddingPx
-                                        + Math.Max(count, 1) * RowHeightPx) * _osDpiScale);
+                                        + Math.Max(count, 1) * RowHeightPx
+                                        + googleAiH) * _osDpiScale);
 
         var pos  = _appWindow.Position;
         var newX = pos.X;
@@ -273,7 +283,7 @@ public class MiniModeWindowService
 
         // SWP_NOZORDER (0x0004) | SWP_NOACTIVATE (0x0010) — atomic resize + move, no z-order change
         SetWindowPos(_hwnd, IntPtr.Zero, newX, newY, w, h, SWP_NOZORDER | 0x0010);
-        SvcLog($"ResizeForProviderCount: count={count}, headerVisible={headerVisible}, pos=({newX},{newY}), size={w}x{h}, dpi={_osDpiScale}");
+        SvcLog($"ResizeForProviderCount: count={count}, headerVisible={headerVisible}, includeGoogleAi={includeGoogleAi}, pos=({newX},{newY}), size={w}x{h}, dpi={_osDpiScale}");
 #endif
     }
 

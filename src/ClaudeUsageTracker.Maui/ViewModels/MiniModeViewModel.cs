@@ -63,7 +63,14 @@ public partial class MiniModeViewModel : ObservableObject
         Dashboard.Providers.CollectionChanged += OnSourceProvidersChanged;
         foreach (var p in Dashboard.Providers)
             p.PropertyChanged += OnProviderPropertyChanged;
+        Dashboard.GoogleAiCard.PropertyChanged += OnGoogleAiCardPropertyChanged;
         RebuildMiniProviders();
+    }
+
+    private void OnGoogleAiCardPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(GoogleAiCardViewModel.ShowInMiniMode))
+            _windowService.ResizeForProviderCount(MiniProviders.Count, Dashboard.GoogleAiCard.ShowInMiniMode);
     }
 
     private void OnSourceProvidersChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -97,7 +104,7 @@ public partial class MiniModeViewModel : ObservableObject
             provider.ShowInMiniMode = Preferences.Get(PrefKey(provider.ProviderName), true);
             provider.PropertyChanged += OnProviderPropertyChanged;
             RebuildMiniProviders();
-            _windowService.ResizeForProviderCount(MiniProviders.Count);
+            _windowService.ResizeForProviderCount(MiniProviders.Count, Dashboard.GoogleAiCard.ShowInMiniMode);
             return;
         }
 
@@ -107,7 +114,7 @@ public partial class MiniModeViewModel : ObservableObject
                 Preferences.Set(PrefKey(provider.ProviderName), provider.ShowInMiniMode);
 
             RebuildMiniProviders();
-            _windowService.ResizeForProviderCount(MiniProviders.Count);
+            _windowService.ResizeForProviderCount(MiniProviders.Count, Dashboard.GoogleAiCard.ShowInMiniMode);
         }
     }
 

@@ -44,46 +44,6 @@
         <!-- ═══ PROVIDER LIST ═══ -->
         <VerticalStackLayout Grid.Row="1" Padding="12,8" Spacing="0">
 
-            <!-- Google AI Studio mini row -->
-            <VerticalStackLayout IsVisible="{Binding Dashboard.GoogleAiCard.ShowInMiniMode}" Spacing="4" Padding="0,8,0,8">
-                <Grid ColumnDefinitions="*,36">
-                    <Label Grid.Column="0" Text="Google AI" FontSize="15" FontAttributes="Bold" VerticalOptions="Center" />
-                    <Grid Grid.Column="1" WidthRequest="36" HeightRequest="36">
-                        <Button Text="↻" FontSize="15"
-                                Command="{Binding Dashboard.RefreshGoogleAiCommand}"
-                                IsVisible="{Binding Dashboard.GoogleAiCard.IsRefreshing, Converter={StaticResource InvertedBoolConverter}}"
-                                IsEnabled="{Binding Dashboard.IsRefreshAllRunning, Converter={StaticResource InvertedBoolConverter}}"
-                                BackgroundColor="Transparent"
-                                TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
-                                Padding="0" />
-                        <ActivityIndicator IsRunning="{Binding Dashboard.GoogleAiCard.IsRefreshing}"
-                                           IsVisible="{Binding Dashboard.GoogleAiCard.IsRefreshing}"
-                                           WidthRequest="16" HeightRequest="16"
-                                           HorizontalOptions="Center" VerticalOptions="Center" />
-                    </Grid>
-                </Grid>
-                <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
-                    <Label Grid.Column="0" FontSize="13">
-                        <Label.FormattedText>
-                            <FormattedString>
-                                <Span Text="{Binding Dashboard.GoogleAiCard.CostLabel, StringFormat='{0}: '}" />
-                                <Span Text="{Binding Dashboard.GoogleAiCard.MiniCost}" FontAttributes="Bold" />
-                            </FormattedString>
-                        </Label.FormattedText>
-                    </Label>
-                    <Label Grid.Column="1" FontSize="13">
-                        <Label.FormattedText>
-                            <FormattedString>
-                                <Span Text="{Binding Dashboard.GoogleAiCard.TokensLabel, StringFormat='{0}: '}" />
-                                <Span Text="{Binding Dashboard.GoogleAiCard.MiniTokens}" FontAttributes="Bold" />
-                            </FormattedString>
-                        </Label.FormattedText>
-                    </Label>
-                </Grid>
-                <BoxView HeightRequest="1" Margin="0,2,0,0"
-                         Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
-            </VerticalStackLayout>
-
             <!-- Empty state -->
             <Label Text="No providers visible — check Settings"
                    FontSize="13" HorizontalOptions="Center" Margin="0,16"
@@ -157,6 +117,47 @@
                         </VerticalStackLayout>
                     </DataTemplate>
                 </BindableLayout.ItemTemplate>
+            </VerticalStackLayout>
+
+            <!-- Google AI Studio mini row (at bottom) -->
+            <VerticalStackLayout IsVisible="{Binding Dashboard.GoogleAiCard.ShowInMiniMode}" Spacing="4" Padding="0,8,0,19">
+                <Grid ColumnDefinitions="*,36">
+                    <Label Grid.Column="0" Text="Google AI" FontSize="15" FontAttributes="Bold" VerticalOptions="Center" />
+                    <Grid Grid.Column="1" WidthRequest="36" HeightRequest="36">
+                        <Button Text="↻" FontSize="15"
+                                Command="{Binding Dashboard.RefreshGoogleAiCommand}"
+                                IsVisible="{Binding Dashboard.GoogleAiCard.IsRefreshing, Converter={StaticResource InvertedBoolConverter}}"
+                                IsEnabled="{Binding Dashboard.IsRefreshAllRunning, Converter={StaticResource InvertedBoolConverter}}"
+                                BackgroundColor="Transparent"
+                                TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
+                                Padding="0" />
+                        <ActivityIndicator IsRunning="{Binding Dashboard.GoogleAiCard.IsRefreshing}"
+                                           IsVisible="{Binding Dashboard.GoogleAiCard.IsRefreshing}"
+                                           WidthRequest="16" HeightRequest="16"
+                                           HorizontalOptions="Center" VerticalOptions="Center" />
+                    </Grid>
+                </Grid>
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                    <Label Grid.Column="0" FontSize="13">
+                        <Label.FormattedText>
+                            <FormattedString>
+                                <Span Text="{Binding Dashboard.GoogleAiCard.CostLabel, StringFormat='{0}: '}" />
+                                <Span Text="{Binding Dashboard.GoogleAiCard.MiniCost}" FontAttributes="Bold" />
+                            </FormattedString>
+                        </Label.FormattedText>
+                    </Label>
+                    <Label Grid.Column="1" FontSize="13">
+                        <Label.FormattedText>
+                            <FormattedString>
+                                <Span Text="{Binding Dashboard.GoogleAiCard.TokensLabel, StringFormat='{0}: '}" />
+                                <Span Text="{Binding Dashboard.GoogleAiCard.MiniTokens}" FontAttributes="Bold" />
+                            </FormattedString>
+                        </Label.FormattedText>
+                    </Label>
+                </Grid>
+                <!-- Divider (matching Claude card's bottom divider) -->
+                <BoxView HeightRequest="1" Margin="0,2,0,0"
+                         Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
             </VerticalStackLayout>
 
         </VerticalStackLayout>
