@@ -13,6 +13,8 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
     private readonly IEnumerable<IUsageProvider> _providers;
     private readonly ISecureStorageService _storage;
     private System.Timers.Timer? _autoRefreshTimer;
+    private System.Timers.Timer? _googleAiRefreshTimer;
+    private const int GoogleAiRefreshMinutes = 30;
     private static readonly Random _jitterRng = new();
 
     [ObservableProperty] private string _errorMessage = "";
@@ -32,6 +34,8 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
         _isRefreshAllRunning || (Providers.Count > 0 && Providers.All(p => p.IsRefreshing));
 
     public ObservableCollection<ProviderCardViewModel> Providers { get; } = [];
+
+    public GoogleAiCardViewModel GoogleAiCard { get; } = new();
 
     public IUpdateService? UpdateService { get; }
 
@@ -93,6 +97,9 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         StopAutoRefresh();
+        _googleAiRefreshTimer?.Stop();
+        _googleAiRefreshTimer?.Dispose();
+        _googleAiRefreshTimer = null;
     }
 
     [RelayCommand]
@@ -113,6 +120,83 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(IsAnyRefreshing));
             OnPropertyChanged(nameof(ShowRefreshAllSpinner));
         }
+
+        // Also refresh Google AI if connected
+        await RefreshGoogleAiAsync();
+    }
+
+    /// <summary>
+    /// Triggered by the 30-minute timer or manual refresh. Calls back to the dashboard page
+    /// via the static Current reference to use the embedded silent WebView.
+    /// </summary>
+    [RelayCommand]
+    public async Task RefreshGoogleAiAsync()
+    {
+        var projectIds = await GetGoogleAiProjectIdsAsync();
+        if (projectIds.Count == 0) return;
+
+        await MainThread.InvokeOnMainThreadAsync(async () =>
+        {
+            GoogleAiCard.IsRefreshing = true;
+            GoogleAiCard.HasError = false;
+            GoogleAiCard.ErrorMessage = "";
+            try
+            {
+                // Delegate to the page's silent WebView
+                var page = Views.ProvidersDashboardPage.Current;
+                if (page == null) return;
+
+                var records = await page.FetchGoogleAiUsageAsync(projectIds);
+                if (records == null || records.Count == 0)
+                {
+                    GoogleAiCard.HasError = true;
+                    GoogleAiCard.ErrorMessage = "No data returned — ensure you are signed in to Google AI Studio.";
+                    return;
+                }
+
+                // Persist to SQLite by project + time range
+                await _db.InitAsync();
+                foreach (var group in records.GroupBy(r => r.ProjectId))
+                    await _db.UpsertGoogleAiRecordsAsync(group.Key, "last-1-day",
+                        group.ToList());
+
+                // Load back all records (covers multi-project totals)
+                var allRecords = await _db.GetGoogleAiRecordsAsync();
+                GoogleAiCard.IsConnected = true;
+                GoogleAiCard.UpdateRecords(allRecords, projectIds);
+            }
+            catch (Exception ex)
+            {
+                GoogleAiCard.HasError = true;
+                GoogleAiCard.ErrorMessage = ex.Message;
+            }
+            finally
+            {
+                GoogleAiCard.IsRefreshing = false;
+            }
+        });
+    }
+
+    public void StartGoogleAiAutoRefresh()
+    {
+        _googleAiRefreshTimer?.Dispose();
+        _googleAiRefreshTimer = new System.Timers.Timer(TimeSpan.FromMinutes(GoogleAiRefreshMinutes).TotalMilliseconds);
+        _googleAiRefreshTimer.Elapsed += async (_, _) => await RefreshGoogleAiAsync();
+        _googleAiRefreshTimer.AutoReset = true;
+        _googleAiRefreshTimer.Start();
+    }
+
+    public async Task<List<string>> GetGoogleAiProjectIdsAsync()
+    {
+        var stored = await _storage.GetAsync("google_ai_projects");
+        if (string.IsNullOrEmpty(stored)) return [];
+        return stored.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
+    }
+
+    public async Task SetGoogleAiProjectIdsAsync(IEnumerable<string> ids)
+    {
+        var joined = string.Join(",", ids);
+        await _storage.SetAsync("google_ai_projects", joined);
     }
 
     private async Task RefreshProviderAsync(IUsageProvider provider)

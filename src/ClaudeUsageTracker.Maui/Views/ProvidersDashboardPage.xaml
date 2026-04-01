@@ -13,6 +13,10 @@
                  IsVisible="False"
                  Source="https://claude.ai/settings/usage" />
 
+        <!-- Hidden container for Google AI silent WebView — populated dynamically by FetchGoogleAiUsageAsync -->
+        <Grid x:Name="GoogleAiSilentWebViewContainer" Grid.Row="0" Grid.RowSpan="4"
+              IsVisible="False" InputTransparent="True" />
+
         <!-- Header -->
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4">
             <Label Grid.Column="0" Text="Plan Usage" FontSize="22" FontAttributes="Bold" VerticalOptions="Center" />
@@ -93,6 +97,80 @@
         <!-- Provider cards list -->
         <ScrollView Grid.Row="3">
             <VerticalStackLayout Spacing="12">
+
+                <!-- Google AI Studio Card -->
+                <Frame CornerRadius="10" Padding="20"
+                       IsVisible="{Binding GoogleAiCard.IsConnected}"
+                       BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
+                    <VerticalStackLayout Spacing="12">
+
+                        <!-- Header: title + project dropdown + refresh -->
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                            <Label Grid.Column="0" Text="Google AI Studio" FontSize="18" FontAttributes="Bold" VerticalOptions="Center" />
+                            <Picker Grid.Column="1"
+                                    ItemsSource="{Binding GoogleAiCard.Projects}"
+                                    SelectedItem="{Binding GoogleAiCard.SelectedProject}"
+                                    HorizontalOptions="End" VerticalOptions="Center" />
+                            <Grid Grid.Column="2" WidthRequest="36" HeightRequest="36">
+                                <Button Text="↻" FontSize="16"
+                                        Command="{Binding RefreshGoogleAiCommand}"
+                                        IsVisible="{Binding GoogleAiCard.IsRefreshing, Converter={StaticResource InvertedBoolConverter}}"
+                                        BackgroundColor="Transparent"
+                                        TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <ActivityIndicator IsRunning="{Binding GoogleAiCard.IsRefreshing}"
+                                                   IsVisible="{Binding GoogleAiCard.IsRefreshing}"
+                                                   WidthRequest="20" HeightRequest="20"
+                                                   HorizontalOptions="Center" VerticalOptions="Center" />
+                            </Grid>
+                        </Grid>
+
+                        <!-- Summary row: Cost | Tokens | Requests (24h) -->
+                        <Grid ColumnDefinitions="*,*,*" ColumnSpacing="12">
+                            <VerticalStackLayout Grid.Column="0">
+                                <Label Text="Cost (24h)" FontSize="11"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                                <Label Text="{Binding GoogleAiCard.Cost24h}" FontSize="16" FontAttributes="Bold" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Column="1">
+                                <Label Text="Tokens (24h)" FontSize="11"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                                <Label Text="{Binding GoogleAiCard.Tokens24h}" FontSize="16" FontAttributes="Bold" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Column="2">
+                                <Label Text="Requests (24h)" FontSize="11"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                                <Label Text="{Binding GoogleAiCard.Requests24h}" FontSize="16" FontAttributes="Bold" />
+                            </VerticalStackLayout>
+                        </Grid>
+
+                        <!-- Spend cap -->
+                        <Label Text="{Binding GoogleAiCard.SpendCapDisplay, StringFormat='Spend cap: {0}'}" FontSize="12"
+                               TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+
+                        <!-- Per-model breakdown table -->
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding GoogleAiCard.ModelRows}">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12" Padding="0,2">
+                                        <Label Grid.Column="0" Text="{Binding ModelName}" FontSize="12" />
+                                        <Label Grid.Column="1" Text="{Binding Requests}" FontSize="12" HorizontalTextAlignment="End"
+                                               TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                                        <Label Grid.Column="2" Text="{Binding InputTokens}" FontSize="12" HorizontalTextAlignment="End" />
+                                    </Grid>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
+
+                        <!-- Error -->
+                        <Label Text="{Binding GoogleAiCard.ErrorMessage}" TextColor="Red" FontSize="11"
+                               IsVisible="{Binding GoogleAiCard.HasError}" />
+
+                        <!-- Last updated -->
+                        <Label Text="{Binding GoogleAiCard.LastUpdated, StringFormat='Updated {0}'}" FontSize="10"
+                               TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+
+                    </VerticalStackLayout>
+                </Frame>
 
                 <!-- Empty state -->
                 <VerticalStackLayout IsVisible="{Binding Providers.Count, Converter={StaticResource CountToBoolConverter}}"

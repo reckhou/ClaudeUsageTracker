@@ -18,7 +18,6 @@ public class GoogleAiWebViewPage : ContentPage
     private int _currentProjectIndex;
     private ScrapePhase _phase;
     private readonly List<GoogleAiUsageRecord> _allRecords = [];
-    private GoogleAiSpendInfo? _currentSpendInfo;
 
     private TaskCompletionSource<List<GoogleAiUsageRecord>?>? _tcs;
 

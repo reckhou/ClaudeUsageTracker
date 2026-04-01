@@ -56,6 +56,7 @@ public static class MauiProgram
 		builder.Services.AddSingleton<MiniModeViewModel>();
 		builder.Services.AddTransient<MiniModePage>();
 		builder.Services.AddTransient<MiniModeSettingsPage>();
+		builder.Services.AddTransient<GoogleAiWebViewPage>();
 
 #if DEBUG
 		builder.Logging.AddDebug();

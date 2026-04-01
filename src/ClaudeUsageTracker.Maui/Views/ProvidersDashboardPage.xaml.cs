@@ -221,6 +221,29 @@ public partial class ProvidersDashboardPage : ContentPage
         }
     }
 
+    /// <summary>
+    /// Performs a silent Google AI Studio fetch using the embedded silent WebView.
+    /// Returns null on failure or timeout.
+    /// </summary>
+    public async Task<List<ClaudeUsageTracker.Core.Models.GoogleAiUsageRecord>?> FetchGoogleAiUsageAsync(List<string> projectIds)
+    {
+        var page = new GoogleAiWebViewPage(silent: true);
+
+        // Add the silent WebView grid to the page layout so it can navigate
+        GoogleAiSilentWebViewContainer.Children.Clear();
+        GoogleAiSilentWebViewContainer.Children.Add(page.SilentWebViewGrid);
+
+        try
+        {
+            page.BeginFetch(projectIds);
+            return await page.WaitForResultAsync();
+        }
+        finally
+        {
+            GoogleAiSilentWebViewContainer.Children.Clear();
+        }
+    }
+
     private void OnMiniModeClicked(object sender, EventArgs e)
     {
         if (_miniWindow != null)
@@ -277,5 +300,14 @@ public partial class ProvidersDashboardPage : ContentPage
         try { await _vm.RefreshAllAsync(); } catch { }
         if (!_vm.IsAutoRefreshRunning)
             _vm.ToggleAutoRefresh();
+
+        // Start Google AI 30-min auto-refresh if connected
+        var googleAiProjects = await _vm.GetGoogleAiProjectIdsAsync();
+        if (googleAiProjects.Count > 0)
+        {
+            // Load existing records from SQLite to populate the card immediately
+            await _vm.RefreshGoogleAiAsync();
+            _vm.StartGoogleAiAutoRefresh();
+        }
     }
 }

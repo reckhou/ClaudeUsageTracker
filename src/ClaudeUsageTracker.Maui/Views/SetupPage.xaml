@@ -61,6 +61,59 @@
           </VerticalStackLayout>
         </Frame>
 
+        <!-- Google AI Studio Card -->
+        <Frame CornerRadius="10" Padding="20"
+               BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
+          <VerticalStackLayout Spacing="12">
+            <Label Text="Google AI Studio" FontSize="16" FontAttributes="Bold" />
+            <Label Text="Tracks API usage, token counts, and cost for your Google AI Studio projects."
+                   FontSize="12" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+
+            <!-- Not connected state -->
+            <VerticalStackLayout IsVisible="{Binding IsGoogleAiConnected, Converter={StaticResource InvertedBoolConverter}}"
+                                 Spacing="8">
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <Entry Grid.Column="0" Placeholder="Project ID (e.g. my-project-123)"
+                       Text="{Binding GoogleAiProjectId}" />
+                <Button Grid.Column="1" Text="Connect"
+                        x:Name="ConnectGoogleAiButton"
+                        Clicked="OnConnectGoogleAiClicked" />
+              </Grid>
+            </VerticalStackLayout>
+
+            <!-- Connected state -->
+            <VerticalStackLayout IsVisible="{Binding IsGoogleAiConnected}" Spacing="8">
+              <Label Text="✓ Connected" TextColor="{StaticResource Primary}" />
+
+              <!-- Project list -->
+              <VerticalStackLayout BindableLayout.ItemsSource="{Binding GoogleAiProjects}">
+                <BindableLayout.ItemTemplate>
+                  <DataTemplate>
+                    <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                      <Label Grid.Column="0" Text="{Binding .}" FontSize="13" VerticalOptions="Center" />
+                      <Button Grid.Column="1" Text="✕" FontSize="11" BackgroundColor="Transparent"
+                              CommandParameter="{Binding .}"
+                              Command="{Binding Source={RelativeSource AncestorType={x:Type ContentPage}}, Path=BindingContext.RemoveGoogleAiProjectCommand}" />
+                    </Grid>
+                  </DataTemplate>
+                </BindableLayout.ItemTemplate>
+              </VerticalStackLayout>
+
+              <!-- Add another project -->
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <Entry Grid.Column="0" Placeholder="Add another project ID..."
+                       Text="{Binding GoogleAiProjectId}" />
+                <Button Grid.Column="1" Text="Add" Command="{Binding AddGoogleAiProjectCommand}" />
+              </Grid>
+
+              <Button Text="Disconnect All" Command="{Binding DisconnectGoogleAiCommand}"
+                      BackgroundColor="Transparent"
+                      TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
+                      FontSize="12" />
+            </VerticalStackLayout>
+          </VerticalStackLayout>
+        </Frame>
+
         <Button Text="Go to Dashboard" Command="{Binding GoToDashboardCommand}"
                 HorizontalOptions="Fill" Margin="0,8,0,0" />
 
