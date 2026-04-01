@@ -229,9 +229,13 @@ public partial class ProvidersDashboardPage : ContentPage
     {
         var page = new GoogleAiWebViewPage(silent: true);
 
-        // Add the silent WebView grid to the page layout so it can navigate
+        // Add the silent WebView grid to the page layout so it can navigate.
+        // Must make the container visible (like Claude's WebView) so WebView2
+        // initializes its browser process; Opacity=0 keeps it invisible to the user.
         GoogleAiSilentWebViewContainer.Children.Clear();
         GoogleAiSilentWebViewContainer.Children.Add(page.SilentWebViewGrid);
+        GoogleAiSilentWebViewContainer.IsVisible = true;
+        GoogleAiSilentWebViewContainer.Opacity = 0;
 
         try
         {
@@ -240,6 +244,8 @@ public partial class ProvidersDashboardPage : ContentPage
         }
         finally
         {
+            GoogleAiSilentWebViewContainer.IsVisible = false;
+            GoogleAiSilentWebViewContainer.Opacity = 1;
             GoogleAiSilentWebViewContainer.Children.Clear();
         }
     }
@@ -314,17 +320,13 @@ public partial class ProvidersDashboardPage : ContentPage
         var googleAiProjects = await _vm.GetGoogleAiProjectIdsAsync();
         if (googleAiProjects.Count > 0)
         {
-            if (firstLoad)
+            if (!firstLoad)
             {
-                // RefreshAllAsync already called RefreshGoogleAiAsync — just start the timer
-                _vm.StartGoogleAiAutoRefresh();
-            }
-            else if (!_vm.IsGoogleAiAutoRefreshRunning)
-            {
-                // Page re-visit: trigger an immediate scrape then start the timer
+                // Page re-visit: always trigger an immediate scrape regardless of timer state
                 try { await _vm.RefreshGoogleAiAsync(); } catch { }
-                _vm.StartGoogleAiAutoRefresh();
             }
+            // Ensure auto-refresh timer is running (no-ops if already started)
+            _vm.StartGoogleAiAutoRefresh();
         }
     }
 }

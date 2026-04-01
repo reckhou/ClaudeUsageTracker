@@ -122,8 +122,10 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(ShowRefreshAllSpinner));
         }
 
-        // Also refresh Google AI if connected
-        await RefreshGoogleAiAsync();
+        // Also refresh Google AI if connected — fire-and-forget so a slow/failed
+        // Google AI scrape doesn't block the next auto-refresh cycle (which would
+        // cause Claude's _claudeTcs guard to reject the overlapping fetch).
+        _ = RefreshGoogleAiAsync();
     }
 
     /// <summary>
