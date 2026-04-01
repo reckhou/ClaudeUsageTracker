@@ -18,6 +18,7 @@ public class UsageDataService(string dbPath) : IUsageDataService
             _db = new SQLiteAsyncConnection(dbPath);
             await _db.CreateTableAsync<QuotaRecord>();
             await _db.CreateTableAsync<ProviderUsageRecord>();
+            await _db.CreateTableAsync<GoogleAiUsageRecord>();
         }
         finally
         {
@@ -57,6 +58,35 @@ public class UsageDataService(string dbPath) : IUsageDataService
     {
         if (_db == null) await InitAsync();
         return await _db!.Table<QuotaRecord>().CountAsync() > 0;
+    }
+
+    public async Task UpsertGoogleAiRecordsAsync(string projectId, string timeRange, List<GoogleAiUsageRecord> records)
+    {
+        EnsureInit();
+        await _db!.ExecuteAsync(
+            "DELETE FROM GoogleAiUsageRecords WHERE ProjectId = ? AND TimeRange = ?",
+            projectId, timeRange);
+        foreach (var r in records)
+            await _db.InsertAsync(r);
+    }
+
+    public async Task<List<GoogleAiUsageRecord>> GetGoogleAiRecordsAsync(string? projectId = null, string? timeRange = null)
+    {
+        EnsureInit();
+        var query = _db!.Table<GoogleAiUsageRecord>();
+        if (projectId != null)
+            query = query.Where(r => r.ProjectId == projectId);
+        if (timeRange != null)
+            query = query.Where(r => r.TimeRange == timeRange);
+        return await query.ToListAsync();
+    }
+
+    public async Task DeleteGoogleAiRecordsAsync(string projectId)
+    {
+        EnsureInit();
+        await _db!.ExecuteAsync(
+            "DELETE FROM GoogleAiUsageRecords WHERE ProjectId = ?",
+            projectId);
     }
 
     private void EnsureInit()
