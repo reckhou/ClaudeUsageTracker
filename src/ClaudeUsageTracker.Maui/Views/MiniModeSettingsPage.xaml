@@ -43,6 +43,26 @@
                         VerticalOptions="Center" />
             </Grid>
 
+            <!-- Google AI filters (only when Google AI is enabled) -->
+            <VerticalStackLayout IsVisible="{Binding Dashboard.GoogleAiCard.ShowInMiniMode}" Spacing="8">
+                <Label Text="Google AI Filters" FontSize="12" FontAttributes="Bold"
+                       TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                <Grid ColumnDefinitions="*,90" ColumnSpacing="8">
+                    <Picker Grid.Column="0"
+                            ItemsSource="{Binding Dashboard.GoogleAiCard.Projects}"
+                            SelectedItem="{Binding Dashboard.GoogleAiCard.SelectedProject}"
+                            HeightRequest="36"
+                            FontSize="13"
+                            VerticalOptions="Center" />
+                    <Picker Grid.Column="1"
+                            ItemsSource="{Binding Dashboard.GoogleAiCard.TimeRanges}"
+                            SelectedItem="{Binding Dashboard.GoogleAiCard.SelectedTimeRange}"
+                            HeightRequest="36"
+                            FontSize="13"
+                            VerticalOptions="Center" />
+                </Grid>
+            </VerticalStackLayout>
+
             <BoxView HeightRequest="1"
                      Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
 

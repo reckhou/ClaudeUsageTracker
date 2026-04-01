@@ -322,7 +322,7 @@ public class MiniModeWindowService
         var id   = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
         var settingsAppWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(id);
 
-        settingsAppWindow.Resize(new Windows.Graphics.SizeInt32(320, 290));
+        settingsAppWindow.Resize(new Windows.Graphics.SizeInt32(320, 360));
 
         if (_appWindow is not null)
         {
