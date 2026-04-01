@@ -13,8 +13,6 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
     private readonly IEnumerable<IUsageProvider> _providers;
     private readonly ISecureStorageService _storage;
     private System.Timers.Timer? _autoRefreshTimer;
-    private System.Timers.Timer? _googleAiRefreshTimer;
-    private const int GoogleAiRefreshMinutes = 30;
     private static readonly Random _jitterRng = new();
 
     [ObservableProperty] private string _errorMessage = "";
@@ -22,12 +20,16 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
     private const string PrefKeyMinutes = "auto_refresh_minutes";
     [ObservableProperty] private int _autoRefreshMinutes = 5;
     [ObservableProperty] private bool _isAutoRefreshRunning;
-    private bool _isRefreshAllRunning;
+    [ObservableProperty] private bool _isRefreshAllRunning;
     private bool _isGoogleAiRefreshing;
 
     public string AutoRefreshToggleText => IsAutoRefreshRunning ? "Stop" : "Start";
 
     public bool IsAnyRefreshing => Providers.Any(p => p.IsRefreshing);
+
+    // True when Claude/MiniMaxi providers are being refreshed — used to
+    // disable the Google AI manual refresh button to avoid WebView2 contention.
+    public bool IsProviderRefreshRunning => _isRefreshAllRunning;
 
     // True only when Refresh All was explicitly clicked (stays true until all done),
     // or when all individual card refresh buttons happen to be running simultaneously.
@@ -98,9 +100,6 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         StopAutoRefresh();
-        _googleAiRefreshTimer?.Stop();
-        _googleAiRefreshTimer?.Dispose();
-        _googleAiRefreshTimer = null;
     }
 
     [RelayCommand]
@@ -108,7 +107,7 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
     {
         HasError = false;
         ErrorMessage = "";
-        _isRefreshAllRunning = true;
+        IsRefreshAllRunning = true;
         OnPropertyChanged(nameof(ShowRefreshAllSpinner));
         try
         {
@@ -117,15 +116,17 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
         }
         finally
         {
-            _isRefreshAllRunning = false;
+            IsRefreshAllRunning = false;
             OnPropertyChanged(nameof(IsAnyRefreshing));
             OnPropertyChanged(nameof(ShowRefreshAllSpinner));
         }
 
-        // Also refresh Google AI if connected — fire-and-forget so a slow/failed
-        // Google AI scrape doesn't block the next auto-refresh cycle (which would
-        // cause Claude's _claudeTcs guard to reject the overlapping fetch).
-        _ = RefreshGoogleAiAsync();
+        // Note: Google AI scraping is intentionally excluded from auto-refresh.
+        // The Google AI WebView shares the same WebView2 runtime as Claude's
+        // silent WebView; running them concurrently (even sequentially in rapid
+        // succession) can corrupt WebView2 state on Windows, causing Claude's
+        // fetch to return null permanently until app restart. Google AI refresh
+        // is available via the card's manual ↻ button only.
     }
 
     /// <summary>
@@ -182,18 +183,6 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
                 _isGoogleAiRefreshing = false;
             }
         });
-    }
-
-    public bool IsGoogleAiAutoRefreshRunning => _googleAiRefreshTimer?.Enabled == true;
-
-    public void StartGoogleAiAutoRefresh()
-    {
-        if (_googleAiRefreshTimer?.Enabled == true) return; // Already running
-        _googleAiRefreshTimer?.Dispose();
-        _googleAiRefreshTimer = new System.Timers.Timer(TimeSpan.FromMinutes(GoogleAiRefreshMinutes).TotalMilliseconds);
-        _googleAiRefreshTimer.Elapsed += async (_, _) => await RefreshGoogleAiAsync();
-        _googleAiRefreshTimer.AutoReset = true;
-        _googleAiRefreshTimer.Start();
     }
 
     /// <summary>

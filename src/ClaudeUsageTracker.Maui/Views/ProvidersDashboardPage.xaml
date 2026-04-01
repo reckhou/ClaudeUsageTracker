@@ -98,79 +98,6 @@
         <ScrollView Grid.Row="3">
             <VerticalStackLayout Spacing="12">
 
-                <!-- Google AI Studio Card -->
-                <Frame CornerRadius="10" Padding="20"
-                       IsVisible="{Binding GoogleAiCard.IsConnected}"
-                       BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
-                    <VerticalStackLayout Spacing="12">
-
-                        <!-- Header: title + refresh -->
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                            <Label Grid.Column="0" Text="Google AI Studio" FontSize="18" FontAttributes="Bold" VerticalOptions="Center" />
-                            <Grid Grid.Column="2" WidthRequest="36" HeightRequest="36">
-                                <Button Text="↻" FontSize="16"
-                                        Command="{Binding RefreshGoogleAiCommand}"
-                                        IsVisible="{Binding GoogleAiCard.IsRefreshing, Converter={StaticResource InvertedBoolConverter}}"
-                                        BackgroundColor="Transparent"
-                                        TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-                                <ActivityIndicator IsRunning="{Binding GoogleAiCard.IsRefreshing}"
-                                                   IsVisible="{Binding GoogleAiCard.IsRefreshing}"
-                                                   WidthRequest="20" HeightRequest="20"
-                                                   HorizontalOptions="Center" VerticalOptions="Center" />
-                            </Grid>
-                        </Grid>
-
-                        <!-- Dropdowns row: Project | Model | Time Range -->
-                        <Grid ColumnDefinitions="*,*,Auto" ColumnSpacing="8">
-                            <Picker Grid.Column="0"
-                                    ItemsSource="{Binding GoogleAiCard.Projects}"
-                                    SelectedItem="{Binding GoogleAiCard.SelectedProject}"
-                                    VerticalOptions="Center" />
-                            <Picker Grid.Column="1"
-                                    ItemsSource="{Binding GoogleAiCard.Models}"
-                                    SelectedItem="{Binding GoogleAiCard.SelectedModel}"
-                                    VerticalOptions="Center" />
-                            <Picker Grid.Column="2"
-                                    ItemsSource="{Binding GoogleAiCard.TimeRanges}"
-                                    SelectedItem="{Binding GoogleAiCard.SelectedTimeRange}"
-                                    WidthRequest="90"
-                                    VerticalOptions="Center" />
-                        </Grid>
-
-                        <!-- Summary row: Cost | Tokens | Requests (dynamic labels) -->
-                        <Grid ColumnDefinitions="*,*,*" ColumnSpacing="12">
-                            <VerticalStackLayout Grid.Column="0">
-                                <Label Text="{Binding GoogleAiCard.CostLabel}" FontSize="11"
-                                       TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
-                                <Label Text="{Binding GoogleAiCard.CostDisplay}" FontSize="16" FontAttributes="Bold" />
-                            </VerticalStackLayout>
-                            <VerticalStackLayout Grid.Column="1">
-                                <Label Text="{Binding GoogleAiCard.TokensLabel}" FontSize="11"
-                                       TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
-                                <Label Text="{Binding GoogleAiCard.TokensDisplay}" FontSize="16" FontAttributes="Bold" />
-                            </VerticalStackLayout>
-                            <VerticalStackLayout Grid.Column="2">
-                                <Label Text="{Binding GoogleAiCard.RequestsLabel}" FontSize="11"
-                                       TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
-                                <Label Text="{Binding GoogleAiCard.RequestsDisplay}" FontSize="16" FontAttributes="Bold" />
-                            </VerticalStackLayout>
-                        </Grid>
-
-                        <!-- Spend cap -->
-                        <Label Text="{Binding GoogleAiCard.SpendCapDisplay, StringFormat='Spend cap: {0}'}" FontSize="12"
-                               TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
-
-                        <!-- Error -->
-                        <Label Text="{Binding GoogleAiCard.ErrorMessage}" TextColor="Red" FontSize="11"
-                               IsVisible="{Binding GoogleAiCard.HasError}" />
-
-                        <!-- Last updated -->
-                        <Label Text="{Binding GoogleAiCard.LastUpdated, StringFormat='Updated {0}'}" FontSize="10"
-                               TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-
-                    </VerticalStackLayout>
-                </Frame>
-
                 <!-- Empty state -->
                 <VerticalStackLayout IsVisible="{Binding Providers.Count, Converter={StaticResource CountToBoolConverter}}"
                                     VerticalOptions="Center" HorizontalOptions="Center" Padding="0,40">
@@ -286,6 +213,80 @@
                         </DataTemplate>
                     </CollectionView.ItemTemplate>
                 </CollectionView>
+
+                <!-- Google AI Studio Card — shown after provider cards -->
+                <Frame CornerRadius="10" Padding="20"
+                       IsVisible="{Binding GoogleAiCard.IsConnected}"
+                       BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
+                    <VerticalStackLayout Spacing="12">
+
+                        <!-- Header: title + refresh -->
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                            <Label Grid.Column="0" Text="Google AI Studio" FontSize="18" FontAttributes="Bold" VerticalOptions="Center" />
+                            <Grid Grid.Column="2" WidthRequest="36" HeightRequest="36">
+                                <Button Text="↻" FontSize="16"
+                                        Command="{Binding RefreshGoogleAiCommand}"
+                                        IsVisible="{Binding GoogleAiCard.IsRefreshing, Converter={StaticResource InvertedBoolConverter}}"
+                                        IsEnabled="{Binding IsRefreshAllRunning, Converter={StaticResource InvertedBoolConverter}}"
+                                        BackgroundColor="Transparent"
+                                        TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <ActivityIndicator IsRunning="{Binding GoogleAiCard.IsRefreshing}"
+                                                   IsVisible="{Binding GoogleAiCard.IsRefreshing}"
+                                                   WidthRequest="20" HeightRequest="20"
+                                                   HorizontalOptions="Center" VerticalOptions="Center" />
+                            </Grid>
+                        </Grid>
+
+                        <!-- Dropdowns row: Project | Model | Time Range -->
+                        <Grid ColumnDefinitions="*,*,Auto" ColumnSpacing="8">
+                            <Picker Grid.Column="0"
+                                    ItemsSource="{Binding GoogleAiCard.Projects}"
+                                    SelectedItem="{Binding GoogleAiCard.SelectedProject}"
+                                    VerticalOptions="Center" />
+                            <Picker Grid.Column="1"
+                                    ItemsSource="{Binding GoogleAiCard.Models}"
+                                    SelectedItem="{Binding GoogleAiCard.SelectedModel}"
+                                    VerticalOptions="Center" />
+                            <Picker Grid.Column="2"
+                                    ItemsSource="{Binding GoogleAiCard.TimeRanges}"
+                                    SelectedItem="{Binding GoogleAiCard.SelectedTimeRange}"
+                                    WidthRequest="90"
+                                    VerticalOptions="Center" />
+                        </Grid>
+
+                        <!-- Summary row: Cost | Tokens | Requests (dynamic labels) -->
+                        <Grid ColumnDefinitions="*,*,*" ColumnSpacing="12">
+                            <VerticalStackLayout Grid.Column="0">
+                                <Label Text="{Binding GoogleAiCard.CostLabel}" FontSize="11"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                                <Label Text="{Binding GoogleAiCard.CostDisplay}" FontSize="16" FontAttributes="Bold" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Column="1">
+                                <Label Text="{Binding GoogleAiCard.TokensLabel}" FontSize="11"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                                <Label Text="{Binding GoogleAiCard.TokensDisplay}" FontSize="16" FontAttributes="Bold" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Column="2">
+                                <Label Text="{Binding GoogleAiCard.RequestsLabel}" FontSize="11"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                                <Label Text="{Binding GoogleAiCard.RequestsDisplay}" FontSize="16" FontAttributes="Bold" />
+                            </VerticalStackLayout>
+                        </Grid>
+
+                        <!-- Spend cap -->
+                        <Label Text="{Binding GoogleAiCard.SpendCapDisplay, StringFormat='Spend cap: {0}'}" FontSize="12"
+                               TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+
+                        <!-- Error -->
+                        <Label Text="{Binding GoogleAiCard.ErrorMessage}" TextColor="Red" FontSize="11"
+                               IsVisible="{Binding GoogleAiCard.HasError}" />
+
+                        <!-- Last updated -->
+                        <Label Text="{Binding GoogleAiCard.LastUpdated, StringFormat='Updated {0}'}" FontSize="10"
+                               TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+
+                    </VerticalStackLayout>
+                </Frame>
             </VerticalStackLayout>
         </ScrollView>
 

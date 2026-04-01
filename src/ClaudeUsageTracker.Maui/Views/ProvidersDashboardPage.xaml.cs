@@ -158,34 +158,47 @@ public partial class ProvidersDashboardPage : ContentPage
             }
         }
 
-        // Step 2: retrieve result
+        // Step 2: poll for the async fetch result — on first boot, fresh TCP/TLS
+        // connections to claude.ai take 2-3 s, so a fixed 500 ms wait misses the result.
+        // Poll every 500 ms for up to 15 seconds before giving up.
         if (string.IsNullOrEmpty(raw) || raw == "\"started\"")
         {
-            await Task.Delay(500);
-            try
+            for (int poll = 0; poll < 30; poll++)
             {
-                raw = await (coreWV2 != null
-                    ? coreWV2.ExecuteScriptAsync("window._claudeResult || 'null'").AsTask()
-                    : ClaudeSilentWebView.EvaluateJavaScriptAsync("window._claudeResult || 'null'"));
-                System.Diagnostics.Debug.WriteLine($"[ClaudeSilentWebView] Retrieved: {raw}");
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ClaudeSilentWebView] Retrieve EXCEPTION: {ex.Message}");
+                await Task.Delay(500);
+                try
+                {
+                    raw = await (coreWV2 != null
+                        ? coreWV2.ExecuteScriptAsync("window._claudeResult || 'null'").AsTask()
+                        : ClaudeSilentWebView.EvaluateJavaScriptAsync("window._claudeResult || 'null'"));
+                    System.Diagnostics.Debug.WriteLine($"[ClaudeSilentWebView] Poll {poll}: {raw}");
+                    if (!string.IsNullOrEmpty(raw) && raw != "null" && raw != "\"started\"")
+                        break;
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ClaudeSilentWebView] Poll {poll} EXCEPTION: {ex.Message}");
+                    break;
+                }
             }
         }
 
-        // Fallback to MAUI wrapper
-        if (string.IsNullOrEmpty(raw) || raw == "\"started\"")
+        // Fallback to MAUI wrapper (polls the same way)
+        if (string.IsNullOrEmpty(raw) || raw == "\"started\"" || raw == "null")
         {
             try
             {
                 raw = await ClaudeSilentWebView.EvaluateJavaScriptAsync(js);
-                if (!string.IsNullOrEmpty(raw) && raw != "\"started\"") { /* got it */ }
-                else
+                if (string.IsNullOrEmpty(raw) || raw == "\"started\"")
                 {
-                    await Task.Delay(500);
-                    raw = await ClaudeSilentWebView.EvaluateJavaScriptAsync("window._claudeResult || 'null'");
+                    for (int poll = 0; poll < 30; poll++)
+                    {
+                        await Task.Delay(500);
+                        raw = await ClaudeSilentWebView.EvaluateJavaScriptAsync("window._claudeResult || 'null'");
+                        System.Diagnostics.Debug.WriteLine($"[ClaudeSilentWebView] MAUI poll {poll}: {raw}");
+                        if (!string.IsNullOrEmpty(raw) && raw != "null" && raw != "\"started\"")
+                            break;
+                    }
                 }
             }
             catch (Exception ex)
@@ -303,30 +316,21 @@ public partial class ProvidersDashboardPage : ContentPage
     {
         base.OnAppearing();
 
-        // Show Google AI card immediately from cached SQLite data (no WebView scrape needed).
-        await _vm.LoadGoogleAiFromCacheAsync();
-
         // Guard only prevents re-loading Claude/MiniMaxi providers on page re-visits.
-        // Google AI refresh and auto-refresh timers must always be set up.
-        var firstLoad = _vm.Providers.Count == 0;
-        if (firstLoad)
+        if (_vm.Providers.Count == 0)
         {
             try { await _vm.RefreshAllAsync(); } catch { }
             if (!_vm.IsAutoRefreshRunning)
                 _vm.ToggleAutoRefresh();
-        }
 
-        // Always ensure Google AI scrape + auto-refresh are running (even on page re-visit)
-        var googleAiProjects = await _vm.GetGoogleAiProjectIdsAsync();
-        if (googleAiProjects.Count > 0)
-        {
-            if (!firstLoad)
+            // Show Google AI card immediately with cached data, then do a live scrape.
+            // Sequential (not concurrent) with provider refresh avoids WebView2 corruption.
+            var googleAiProjects = await _vm.GetGoogleAiProjectIdsAsync();
+            if (googleAiProjects.Count > 0)
             {
-                // Page re-visit: always trigger an immediate scrape regardless of timer state
+                try { await _vm.LoadGoogleAiFromCacheAsync(); } catch { }
                 try { await _vm.RefreshGoogleAiAsync(); } catch { }
             }
-            // Ensure auto-refresh timer is running (no-ops if already started)
-            _vm.StartGoogleAiAutoRefresh();
         }
     }
 }

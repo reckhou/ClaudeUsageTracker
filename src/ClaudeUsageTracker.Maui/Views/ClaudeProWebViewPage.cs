@@ -325,42 +325,52 @@ public class ClaudeProWebViewPage : ContentPage
             errorDetail = "CoreWV2Exception: " + ex.Message;
         }
 
-        // Step 2: retrieve the stored result (this works correctly since it's synchronous)
+        // Step 2: poll for the stored result — on first boot, fresh TCP/TLS connections
+        // to claude.ai take 2-3 s, so a fixed 500 ms wait misses the result.
+        // Poll every 500 ms for up to 15 seconds before giving up.
         if (string.IsNullOrEmpty(raw) || raw == "\"started\"")
         {
-            try
+            for (int poll = 0; poll < 30; poll++)
             {
-                System.Diagnostics.Debug.WriteLine("[ClaudeProWebView] Retrieving result from window._claudeResult...");
-                await Task.Delay(500); // Brief wait for async JS to complete
-                raw = await coreWV2!.ExecuteScriptAsync("window._claudeResult || 'null'");
-                System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] Retrieved result: {(raw == null ? "null" : raw)}");
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] Retrieve EXCEPTION: {ex}");
-                errorDetail = "RetrieveException: " + ex.Message;
+                await Task.Delay(500);
+                try
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] Poll {poll}: retrieving window._claudeResult...");
+                    raw = await coreWV2!.ExecuteScriptAsync("window._claudeResult || 'null'");
+                    System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] Poll {poll}: {(raw == null ? "null" : raw)}");
+                    if (!string.IsNullOrEmpty(raw) && raw != "null" && raw != "\"started\"")
+                        break;
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] Poll {poll} EXCEPTION: {ex.Message}");
+                    errorDetail = "RetrieveException: " + ex.Message;
+                    break;
+                }
             }
         }
 
-        // Fall back to MAUI wrapper for both fire-and-forget and retrieval steps
-        if (string.IsNullOrEmpty(raw) || raw == "\"started\"")
+        // Fall back to MAUI wrapper (polls the same way)
+        if (string.IsNullOrEmpty(raw) || raw == "\"started\"" || raw == "null")
         {
             try
             {
                 System.Diagnostics.Debug.WriteLine("[ClaudeProWebView] Fallback: executing via MAUI wrapper...");
                 raw = await _webView.EvaluateJavaScriptAsync(js);
                 System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] MAUI wrapper returned: {(raw == null ? "null" : raw)}");
-                if (!string.IsNullOrEmpty(raw) && raw != "\"started\"")
+                if (string.IsNullOrEmpty(raw) || raw == "\"started\"")
                 {
-                    // Already got result
-                }
-                else
-                {
-                    await Task.Delay(500);
-                    var retrieved = await _webView.EvaluateJavaScriptAsync("window._claudeResult || 'null'");
-                    System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] MAUI retrieved: {(retrieved == null ? "null" : retrieved)}");
-                    if (!string.IsNullOrEmpty(retrieved) && retrieved != "null")
-                        raw = retrieved;
+                    for (int poll = 0; poll < 30; poll++)
+                    {
+                        await Task.Delay(500);
+                        var retrieved = await _webView.EvaluateJavaScriptAsync("window._claudeResult || 'null'");
+                        System.Diagnostics.Debug.WriteLine($"[ClaudeProWebView] MAUI poll {poll}: {(retrieved == null ? "null" : retrieved)}");
+                        if (!string.IsNullOrEmpty(retrieved) && retrieved != "null" && retrieved != "\"started\"")
+                        {
+                            raw = retrieved;
+                            break;
+                        }
+                    }
                 }
             }
             catch (Exception ex)

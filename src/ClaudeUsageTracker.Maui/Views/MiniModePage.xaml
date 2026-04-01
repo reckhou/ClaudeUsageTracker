@@ -52,6 +52,7 @@
                         <Button Text="↻" FontSize="15"
                                 Command="{Binding Dashboard.RefreshGoogleAiCommand}"
                                 IsVisible="{Binding Dashboard.GoogleAiCard.IsRefreshing, Converter={StaticResource InvertedBoolConverter}}"
+                                IsEnabled="{Binding Dashboard.IsRefreshAllRunning, Converter={StaticResource InvertedBoolConverter}}"
                                 BackgroundColor="Transparent"
                                 TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
                                 Padding="0" />
