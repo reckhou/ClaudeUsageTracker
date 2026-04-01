@@ -23,6 +23,7 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
     [ObservableProperty] private int _autoRefreshMinutes = 5;
     [ObservableProperty] private bool _isAutoRefreshRunning;
     private bool _isRefreshAllRunning;
+    private bool _isGoogleAiRefreshing;
 
     public string AutoRefreshToggleText => IsAutoRefreshRunning ? "Stop" : "Start";
 
@@ -134,9 +135,12 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
     {
         var projectIds = await GetGoogleAiProjectIdsAsync();
         if (projectIds.Count == 0) return;
+        if (_isGoogleAiRefreshing) return; // Prevent concurrent scrapes (avoids doubled records)
 
         await MainThread.InvokeOnMainThreadAsync(async () =>
         {
+            if (_isGoogleAiRefreshing) return; // Double-check on UI thread
+            _isGoogleAiRefreshing = true;
             GoogleAiCard.IsRefreshing = true;
             GoogleAiCard.HasError = false;
             GoogleAiCard.ErrorMessage = "";
@@ -173,12 +177,16 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
             finally
             {
                 GoogleAiCard.IsRefreshing = false;
+                _isGoogleAiRefreshing = false;
             }
         });
     }
 
+    public bool IsGoogleAiAutoRefreshRunning => _googleAiRefreshTimer?.Enabled == true;
+
     public void StartGoogleAiAutoRefresh()
     {
+        if (_googleAiRefreshTimer?.Enabled == true) return; // Already running
         _googleAiRefreshTimer?.Dispose();
         _googleAiRefreshTimer = new System.Timers.Timer(TimeSpan.FromMinutes(GoogleAiRefreshMinutes).TotalMilliseconds);
         _googleAiRefreshTimer.Elapsed += async (_, _) => await RefreshGoogleAiAsync();

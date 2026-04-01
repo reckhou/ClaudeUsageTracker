@@ -300,14 +300,31 @@ public partial class ProvidersDashboardPage : ContentPage
         // Show Google AI card immediately from cached SQLite data (no WebView scrape needed).
         await _vm.LoadGoogleAiFromCacheAsync();
 
-        if (_vm.Providers.Count > 0) return;
-        // RefreshAllAsync already calls RefreshGoogleAiAsync internally — no need to call it again
-        try { await _vm.RefreshAllAsync(); } catch { }
-        if (!_vm.IsAutoRefreshRunning)
-            _vm.ToggleAutoRefresh();
+        // Guard only prevents re-loading Claude/MiniMaxi providers on page re-visits.
+        // Google AI refresh and auto-refresh timers must always be set up.
+        var firstLoad = _vm.Providers.Count == 0;
+        if (firstLoad)
+        {
+            try { await _vm.RefreshAllAsync(); } catch { }
+            if (!_vm.IsAutoRefreshRunning)
+                _vm.ToggleAutoRefresh();
+        }
 
+        // Always ensure Google AI scrape + auto-refresh are running (even on page re-visit)
         var googleAiProjects = await _vm.GetGoogleAiProjectIdsAsync();
         if (googleAiProjects.Count > 0)
-            _vm.StartGoogleAiAutoRefresh();
+        {
+            if (firstLoad)
+            {
+                // RefreshAllAsync already called RefreshGoogleAiAsync — just start the timer
+                _vm.StartGoogleAiAutoRefresh();
+            }
+            else if (!_vm.IsGoogleAiAutoRefreshRunning)
+            {
+                // Page re-visit: trigger an immediate scrape then start the timer
+                try { await _vm.RefreshGoogleAiAsync(); } catch { }
+                _vm.StartGoogleAiAutoRefresh();
+            }
+        }
     }
 }

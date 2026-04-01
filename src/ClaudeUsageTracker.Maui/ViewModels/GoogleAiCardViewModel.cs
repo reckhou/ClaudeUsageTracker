@@ -35,6 +35,8 @@ public partial class GoogleAiCardViewModel : ObservableObject
     [ObservableProperty] private bool _showInMiniMode = true;
 
     private List<GoogleAiUsageRecord> _cachedRecords = [];
+    private List<string> _activeProjectIds = [];
+    private bool _isRecomputing;
 
     // Mini mode exposes cost and tokens for the selected time range
     public string MiniCost => CostDisplay;
@@ -62,32 +64,33 @@ public partial class GoogleAiCardViewModel : ObservableObject
     /// <summary>Updates the cached records and recomputes display values.</summary>
     public void UpdateRecords(List<GoogleAiUsageRecord> records, IEnumerable<string> projectIds)
     {
-        _cachedRecords = records;
+        _activeProjectIds = projectIds.ToList();
 
-        // Rebuild project list: "All Projects" + each unique project ID
-        var ids = projectIds.ToList();
+        // Only keep records for active projects — DB may contain stale data from removed projects
+        _cachedRecords = records.Where(r => _activeProjectIds.Contains(r.ProjectId)).ToList();
+
+        // Rebuild project list: "All Projects" + each active project ID
         var newProjects = new ObservableCollection<string> { "All Projects" };
-        foreach (var id in ids)
+        foreach (var id in _activeProjectIds)
             newProjects.Add(id);
         Projects = newProjects;
-
-        // Rebuild model list from all records
-        var modelNames = records.Select(r => r.ModelName).Where(m => !string.IsNullOrEmpty(m)).Distinct().OrderBy(m => m).ToList();
-        var newModels = new ObservableCollection<string> { "All Models" };
-        foreach (var m in modelNames)
-            newModels.Add(m);
-        Models = newModels;
 
         // Keep selected values if still valid, otherwise reset
         if (!Projects.Contains(SelectedProject))
             SelectedProject = "All Projects";
-        if (!Models.Contains(SelectedModel))
-            SelectedModel = "All Models";
 
+        // Model list is rebuilt in RecomputeDisplayValues based on selected time range
         RecomputeDisplayValues();
     }
 
     private void RecomputeDisplayValues()
+    {
+        if (_isRecomputing) return; // Guard against re-entrance from model list rebuild
+        _isRecomputing = true;
+        try { RecomputeDisplayValuesCore(); } finally { _isRecomputing = false; }
+    }
+
+    private void RecomputeDisplayValuesCore()
     {
         // Map UI time range to SQLite TimeRange value
         var dbTimeRange = SelectedTimeRange == "7 days" ? "last-7-days" : "last-1-day";
@@ -107,9 +110,23 @@ public partial class GoogleAiCardViewModel : ObservableObject
         // Filter by time range
         var rangeRecords = records.Where(r => r.TimeRange == dbTimeRange).ToList();
 
+        // Rebuild model dropdown: only show models that have data for the selected time range
+        var modelsWithData = rangeRecords
+            .Where(r => !string.IsNullOrEmpty(r.ModelName) && (r.InputTokens > 0 || r.RequestCount > 0))
+            .Select(r => r.ModelName)
+            .Distinct()
+            .OrderBy(m => m)
+            .ToList();
+        var newModels = new ObservableCollection<string> { "All Models" };
+        foreach (var m in modelsWithData)
+            newModels.Add(m);
+        Models = newModels;
+        if (!Models.Contains(SelectedModel))
+            SelectedModel = "All Models";
+
         // Filter by model for tokens/requests display
         var modelRecords = SelectedModel == "All Models"
-            ? rangeRecords
+            ? rangeRecords.Where(r => r.InputTokens > 0 || r.RequestCount > 0).ToList()
             : rangeRecords.Where(r => r.ModelName == SelectedModel).ToList();
 
         var totalTokens = modelRecords.Sum(r => r.InputTokens);
@@ -118,9 +135,10 @@ public partial class GoogleAiCardViewModel : ObservableObject
         TokensDisplay = totalTokens > 0 ? FormatTokens(totalTokens) : "—";
         RequestsDisplay = totalRequests > 0 ? $"{totalRequests:N0}" : "—";
 
-        // Cost: for 24h use SpendCapUsed as rough proxy; for 7 days use Cost from spend page
-        var first = rangeRecords.FirstOrDefault();
-        var currency = first?.Currency ?? "";
+        // Cost and spend cap are global per-project values, not per-model.
+        // Use ALL records (not filtered by time range) to get the current spend cap state.
+        var anyRecord = records.FirstOrDefault(r => !string.IsNullOrEmpty(r.Currency));
+        var currency = anyRecord?.Currency ?? "";
 
         if (is24h)
         {
@@ -139,7 +157,7 @@ public partial class GoogleAiCardViewModel : ObservableObject
             CostDisplay = cost > 0 ? $"{currency}{cost:F2}" : "—";
         }
 
-        // Spend cap display (use any records — spend cap is the same across time ranges)
+        // Spend cap display — global per-project, same across time ranges
         var capUsedTotal = records.GroupBy(r => r.ProjectId).Select(g => g.Max(r => r.SpendCapUsed)).Sum();
         var capLimitTotal = records.GroupBy(r => r.ProjectId).Select(g => g.Max(r => r.SpendCapLimit)).Sum();
         var capCurrency = records.FirstOrDefault()?.Currency ?? currency;

@@ -28,7 +28,8 @@ public partial class App : Application
         {
             var pro = await _storage.GetAsync("claude_pro_connected");
             var mini = await _storage.GetAsync("MiniMaxiApiKey");
-            if (pro == "true" || !string.IsNullOrEmpty(mini))
+            var googleAi = await _storage.GetAsync("google_ai_projects");
+            if (pro == "true" || !string.IsNullOrEmpty(mini) || !string.IsNullOrEmpty(googleAi))
                 await Shell.Current.GoToAsync("//providers");
         }
         catch { /* stay on setup page */ }

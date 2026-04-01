@@ -475,11 +475,10 @@ public class GoogleAiWebViewPage : ContentPage
     {
         long total = 0;
         long lastDay = 0;
-        bool foundLastDay = false;
 
         if (!row.TryGetProperty("values", out var vals)) return (0, 0);
 
-        // Collect all values into a list so we can scan right-to-left for last day
+        // Collect all values into a list; rightmost column = today
         var values = new List<long>();
         foreach (var v in vals.EnumerateArray())
         {
@@ -489,18 +488,10 @@ public class GoogleAiWebViewPage : ContentPage
             total += parsed;
         }
 
-        // Find the most recent (rightmost) day that has data
-        for (int i = values.Count - 1; i >= 0; i--)
-        {
-            if (values[i] > 0)
-            {
-                lastDay = values[i];
-                foundLastDay = true;
-                break;
-            }
-        }
+        // Last day = second-to-last column (yesterday, most recent complete day)
+        // The rightmost column is today which may still be accumulating.
+        lastDay = values.Count > 1 ? values[^2] : values.Count > 0 ? values[^1] : 0;
 
-        // If no non-zero day found, lastDay stays 0
         return (total, lastDay);
     }
 
