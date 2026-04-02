@@ -23,8 +23,8 @@
     <!-- App Identifier -->
     <ApplicationId>com.companyname.claudeusagetracker.maui</ApplicationId>
     <!-- Versions -->
-    <ApplicationDisplayVersion>1.5.0</ApplicationDisplayVersion>
-    <ApplicationVersion>0</ApplicationVersion>
+    <ApplicationDisplayVersion>1.5.1</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
     <!-- Wire .NET assembly version to ApplicationDisplayVersion so AppInfo.VersionString
          returns the correct value for Windows unpackaged builds. -->
     <Version>$(ApplicationDisplayVersion)</Version>
