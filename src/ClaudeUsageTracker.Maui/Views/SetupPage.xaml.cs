@@ -1,6 +1,5 @@
 using ClaudeUsageTracker.Core.Services;
 using ClaudeUsageTracker.Core.ViewModels;
-using ClaudeUsageTracker.Maui.ViewModels;
 
 namespace ClaudeUsageTracker.Maui.Views;
 
@@ -41,41 +40,6 @@ public partial class SetupPage : ContentPage
             if (db != null) { await db.InitAsync(); await db.UpsertQuotaRecordAsync(record); }
             _vm.IsClaudeProConnected = true;
             _vm.ClaudeProStatus = $"Connected · Session {record.FiveHourUtilization}% · Weekly {record.SevenDayUtilization}%";
-        }
-    }
-
-    private async void OnConnectGoogleAiClicked(object sender, EventArgs e)
-    {
-        var projectId = _vm.GoogleAiProjectId.Trim();
-        if (string.IsNullOrEmpty(projectId)) return;
-
-        ConnectGoogleAiButton.IsEnabled = false;
-        try
-        {
-            // Open interactive WebView modal for Google login
-            var webViewPage = new GoogleAiWebViewPage(silent: false);
-            webViewPage.BeginFetch([projectId]);
-
-            await Navigation.PushModalAsync(webViewPage);
-            var records = await webViewPage.WaitForResultAsync(timeoutMs: 180_000);
-            await Navigation.PopModalAsync();
-
-            if (records != null && records.Count > 0)
-            {
-                // Save project ID and persist records
-                await _vm.AddGoogleAiProjectAsync();
-
-                var db = Handler?.MauiContext?.Services.GetService<IUsageDataService>();
-                if (db != null)
-                {
-                    await db.InitAsync();
-                    await db.UpsertGoogleAiRecordsAsync(projectId, "last-1-day", records);
-                }
-            }
-        }
-        finally
-        {
-            ConnectGoogleAiButton.IsEnabled = true;
         }
     }
 }

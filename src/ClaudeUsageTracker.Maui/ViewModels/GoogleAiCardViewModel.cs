@@ -35,7 +35,9 @@ public partial class GoogleAiCardViewModel : ObservableObject
     [ObservableProperty] private bool _showInMiniMode = true;
 
     private List<GoogleAiUsageRecord> _cachedRecords = [];
-    private List<string> _activeProjectIds = [];
+    private List<GoogleAiProject> _activeProjects = [];
+    /// <summary>Maps display name → project ID for dropdown selection lookups.</summary>
+    private Dictionary<string, string> _displayNameToId = new();
     private bool _isRecomputing;
 
     // Mini mode exposes cost and tokens for the selected time range
@@ -62,17 +64,19 @@ public partial class GoogleAiCardViewModel : ObservableObject
     }
 
     /// <summary>Updates the cached records and recomputes display values.</summary>
-    public void UpdateRecords(List<GoogleAiUsageRecord> records, IEnumerable<string> projectIds)
+    public void UpdateRecords(List<GoogleAiUsageRecord> records, IEnumerable<GoogleAiProject> projects)
     {
-        _activeProjectIds = projectIds.ToList();
+        _activeProjects = projects.ToList();
+        var activeIds = _activeProjects.Select(p => p.Id).ToHashSet();
 
         // Only keep records for active projects — DB may contain stale data from removed projects
-        _cachedRecords = records.Where(r => _activeProjectIds.Contains(r.ProjectId)).ToList();
+        _cachedRecords = records.Where(r => activeIds.Contains(r.ProjectId)).ToList();
 
-        // Rebuild project list: "All Projects" + each active project ID
+        // Build display-name → ID mapping and populate dropdown with names
+        _displayNameToId = _activeProjects.ToDictionary(p => p.DisplayName, p => p.Id);
         var newProjects = new ObservableCollection<string> { "All Projects" };
-        foreach (var id in _activeProjectIds)
-            newProjects.Add(id);
+        foreach (var p in _activeProjects)
+            newProjects.Add(p.DisplayName);
         Projects = newProjects;
 
         // Keep selected values if still valid, otherwise reset
@@ -102,10 +106,17 @@ public partial class GoogleAiCardViewModel : ObservableObject
         TokensLabel = $"Tokens ({rangeLabel})";
         RequestsLabel = $"Requests ({rangeLabel})";
 
-        // Filter by project
-        var records = SelectedProject == "All Projects"
-            ? _cachedRecords
-            : _cachedRecords.Where(r => r.ProjectId == SelectedProject).ToList();
+        // Filter by project (resolve display name to project ID)
+        List<GoogleAiUsageRecord> records;
+        if (SelectedProject == "All Projects")
+        {
+            records = _cachedRecords;
+        }
+        else
+        {
+            var projectId = _displayNameToId.TryGetValue(SelectedProject, out var id) ? id : SelectedProject;
+            records = _cachedRecords.Where(r => r.ProjectId == projectId).ToList();
+        }
 
         // Filter by time range
         var rangeRecords = records.Where(r => r.TimeRange == dbTimeRange).ToList();

@@ -23,6 +23,13 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isRefreshAllRunning;
     private bool _isGoogleAiRefreshing;
 
+    /// <summary>
+    /// Session-level cache: discovered projects from the /projects page.
+    /// Static so it survives ViewModel recreation but resets on app restart.
+    /// Null = not yet scraped this session; empty list = scraped but found nothing.
+    /// </summary>
+    private static List<GoogleAiProject>? _sessionProjectCache;
+
     public string AutoRefreshToggleText => IsAutoRefreshRunning ? "Stop" : "Start";
 
     public bool IsAnyRefreshing => Providers.Any(p => p.IsRefreshing);
@@ -132,12 +139,12 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Triggered by the 30-minute timer or manual refresh. Calls back to the dashboard page
     /// via the static Current reference to use the embedded silent WebView.
+    /// On the first call per app session, scrapes the /projects page to discover all projects;
+    /// subsequent calls reuse the cached project list.
     /// </summary>
     [RelayCommand]
     public async Task RefreshGoogleAiAsync()
     {
-        var projectIds = await GetGoogleAiProjectIdsAsync();
-        if (projectIds.Count == 0) return;
         if (_isGoogleAiRefreshing) return; // Prevent concurrent scrapes (avoids doubled records)
 
         await MainThread.InvokeOnMainThreadAsync(async () =>
@@ -149,11 +156,34 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
             GoogleAiCard.ErrorMessage = "";
             try
             {
-                // Delegate to the page's silent WebView
                 var page = Views.ProvidersDashboardPage.Current;
                 if (page == null) return;
 
-                var records = await page.FetchGoogleAiUsageAsync(projectIds);
+                bool needsDiscovery = _sessionProjectCache == null;
+                List<GoogleAiUsageRecord>? records;
+                List<GoogleAiProject> projects;
+
+                if (needsDiscovery)
+                {
+                    // First refresh this session: discover projects from /projects page
+                    var (discoveredRecords, discoveredProjects) = await page.FetchGoogleAiUsageWithDiscoveryAsync();
+                    records = discoveredRecords;
+                    projects = discoveredProjects ?? [];
+                    _sessionProjectCache = projects;
+
+                    // Persist discovered projects to storage
+                    if (projects.Count > 0)
+                        await SetGoogleAiProjectsAsync(projects);
+                }
+                else
+                {
+                    // Subsequent refreshes: use cached project IDs
+                    projects = _sessionProjectCache!;
+                    var projectIds = projects.Select(p => p.Id).ToList();
+                    if (projectIds.Count == 0) return;
+                    records = await page.FetchGoogleAiUsageAsync(projectIds);
+                }
+
                 if (records == null || records.Count == 0)
                 {
                     GoogleAiCard.HasError = true;
@@ -170,7 +200,7 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
                 // Load back all records (covers multi-project totals)
                 var allRecords = await _db.GetGoogleAiRecordsAsync();
                 GoogleAiCard.IsConnected = true;
-                GoogleAiCard.UpdateRecords(allRecords, projectIds);
+                GoogleAiCard.UpdateRecords(allRecords, projects);
             }
             catch (Exception ex)
             {
@@ -191,29 +221,33 @@ public partial class ProvidersDashboardViewModel : ObservableObject, IDisposable
     /// </summary>
     public async Task LoadGoogleAiFromCacheAsync()
     {
-        var projectIds = await GetGoogleAiProjectIdsAsync();
-        if (projectIds.Count == 0) return;
+        var projects = await GetGoogleAiProjectsAsync();
+        if (projects.Count == 0) return;
 
         await _db.InitAsync();
         var cached = await _db.GetGoogleAiRecordsAsync();
         await MainThread.InvokeOnMainThreadAsync(() =>
         {
             GoogleAiCard.IsConnected = true;
-            GoogleAiCard.UpdateRecords(cached, projectIds);
+            GoogleAiCard.UpdateRecords(cached, projects);
         });
+    }
+
+    public async Task<List<GoogleAiProject>> GetGoogleAiProjectsAsync()
+    {
+        var stored = await _storage.GetAsync("google_ai_projects");
+        return GoogleAiProject.FromJson(stored);
     }
 
     public async Task<List<string>> GetGoogleAiProjectIdsAsync()
     {
-        var stored = await _storage.GetAsync("google_ai_projects");
-        if (string.IsNullOrEmpty(stored)) return [];
-        return stored.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
+        var projects = await GetGoogleAiProjectsAsync();
+        return projects.Select(p => p.Id).ToList();
     }
 
-    public async Task SetGoogleAiProjectIdsAsync(IEnumerable<string> ids)
+    public async Task SetGoogleAiProjectsAsync(IEnumerable<GoogleAiProject> projects)
     {
-        var joined = string.Join(",", ids);
-        await _storage.SetAsync("google_ai_projects", joined);
+        await _storage.SetAsync("google_ai_projects", GoogleAiProject.ToJson(projects));
     }
 
     private async Task RefreshProviderAsync(IUsageProvider provider)

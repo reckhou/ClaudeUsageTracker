@@ -263,6 +263,35 @@ public partial class ProvidersDashboardPage : ContentPage
         }
     }
 
+    /// <summary>
+    /// Performs a silent Google AI Studio fetch that first discovers all projects
+    /// from the /projects page, then scrapes usage and spend for each.
+    /// Returns both the usage records and the discovered project list.
+    /// </summary>
+    public async Task<(List<GoogleAiUsageRecord>? Records, List<GoogleAiProject>? Projects)> FetchGoogleAiUsageWithDiscoveryAsync()
+    {
+        var page = new GoogleAiWebViewPage(silent: true);
+
+        GoogleAiSilentWebViewContainer.Children.Clear();
+        GoogleAiSilentWebViewContainer.Children.Add(page.SilentWebViewGrid);
+        GoogleAiSilentWebViewContainer.IsVisible = true;
+        GoogleAiSilentWebViewContainer.Opacity = 0;
+
+        try
+        {
+            page.BeginFetchWithDiscovery();
+            var records = await page.WaitForResultAsync();
+            var projects = page.GetDiscoveredProjects();
+            return (records, projects);
+        }
+        finally
+        {
+            GoogleAiSilentWebViewContainer.IsVisible = false;
+            GoogleAiSilentWebViewContainer.Opacity = 1;
+            GoogleAiSilentWebViewContainer.Children.Clear();
+        }
+    }
+
     private void OnMiniModeClicked(object sender, EventArgs e)
     {
         if (_miniWindow != null)
@@ -325,12 +354,10 @@ public partial class ProvidersDashboardPage : ContentPage
 
             // Show Google AI card immediately with cached data, then do a live scrape.
             // Sequential (not concurrent) with provider refresh avoids WebView2 corruption.
-            var googleAiProjects = await _vm.GetGoogleAiProjectIdsAsync();
-            if (googleAiProjects.Count > 0)
-            {
-                try { await _vm.LoadGoogleAiFromCacheAsync(); } catch { }
-                try { await _vm.RefreshGoogleAiAsync(); } catch { }
-            }
+            // LoadGoogleAiFromCacheAsync shows stale data if any projects were previously saved;
+            // RefreshGoogleAiAsync then does a live scrape (with project discovery on first run).
+            try { await _vm.LoadGoogleAiFromCacheAsync(); } catch { }
+            try { await _vm.RefreshGoogleAiAsync(); } catch { }
         }
     }
 }

@@ -1,4 +1,5 @@
 using ClaudeUsageTracker.Core.Models;
+using System.Text.Json;
 
 namespace ClaudeUsageTracker.Maui.Views;
 
@@ -28,7 +29,13 @@ public class GoogleAiWebViewPage : ContentPage
 
     public Grid SilentWebViewGrid { get; }
 
-    private enum ScrapePhase { UsagePage, SpendPage, Done }
+    private enum ScrapePhase { ProjectsPage, UsagePage, SpendPage, Done }
+
+    /// <summary>
+    /// Discovered projects from the /projects page scrape.
+    /// Populated during the ProjectsPage phase and returned alongside usage records.
+    /// </summary>
+    private List<GoogleAiProject> _discoveredProjects = [];
 
     public GoogleAiWebViewPage(bool silent = false)
     {
@@ -70,13 +77,24 @@ public class GoogleAiWebViewPage : ContentPage
             };
             _retryBtn.Clicked += (_, _) =>
             {
-                if (_tcs == null || _projectIds.Count == 0) return;
+                if (_tcs == null) return;
                 _retryBtn.IsVisible = false;
                 _statusLabel.Text = "Retrying\u2026";
-                _phase = ScrapePhase.UsagePage;
                 _currentProjectIndex = 0;
                 _allRecords.Clear();
-                NavigateToUsagePage(_projectIds[0]);
+                if (_discoveredProjects.Count > 0 || _projectIds.Count > 0)
+                {
+                    // Already have projects — retry usage scraping
+                    _phase = ScrapePhase.UsagePage;
+                    NavigateToUsagePage(_projectIds[0]);
+                }
+                else
+                {
+                    // Discovery mode — retry from projects page
+                    _discoveredProjects.Clear();
+                    _phase = ScrapePhase.ProjectsPage;
+                    NavigateToProjectsPage();
+                }
             };
 
             var controlsStack = new VerticalStackLayout
@@ -104,7 +122,7 @@ public class GoogleAiWebViewPage : ContentPage
     }
 
     /// <summary>
-    /// Fetches usage data for all provided project IDs.
+    /// Fetches usage data for all provided project IDs (skips project discovery).
     /// Call this before awaiting WaitForResultAsync.
     /// </summary>
     public void BeginFetch(IEnumerable<string> projectIds)
@@ -116,6 +134,33 @@ public class GoogleAiWebViewPage : ContentPage
 
         if (_projectIds.Count > 0)
             NavigateToUsagePage(_projectIds[0]);
+    }
+
+    /// <summary>
+    /// First scrapes the /projects page to discover all projects (names + IDs),
+    /// then fetches usage and spend for each discovered project.
+    /// </summary>
+    public void BeginFetchWithDiscovery()
+    {
+        _projectIds = [];
+        _currentProjectIndex = 0;
+        _allRecords.Clear();
+        _discoveredProjects = [];
+        _phase = ScrapePhase.ProjectsPage;
+        NavigateToProjectsPage();
+    }
+
+    /// <summary>
+    /// Returns discovered projects after a BeginFetchWithDiscovery run completes.
+    /// </summary>
+    public List<GoogleAiProject> GetDiscoveredProjects() => _discoveredProjects;
+
+    private void NavigateToProjectsPage()
+    {
+        var url = "https://aistudio.google.com/projects";
+        System.Diagnostics.Debug.WriteLine($"[GoogleAiWebView] Navigating to projects: {url}");
+        _statusLabel.Text = "Discovering projects\u2026";
+        _webView.Source = new UrlWebViewSource { Url = url };
     }
 
     public Task<List<GoogleAiUsageRecord>?> WaitForResultAsync(int timeoutMs = 120_000)
@@ -186,10 +231,88 @@ public class GoogleAiWebViewPage : ContentPage
 
         var coreWV2 = TryGetCoreWebView2();
 
-        if (_phase == ScrapePhase.UsagePage)
+        if (_phase == ScrapePhase.ProjectsPage)
+            await ScrapeProjectsPageAsync(coreWV2);
+        else if (_phase == ScrapePhase.UsagePage)
             await ScrapeUsagePageAsync(coreWV2);
         else if (_phase == ScrapePhase.SpendPage)
             await ScrapeSpendPageAsync(coreWV2);
+    }
+
+    private async Task ScrapeProjectsPageAsync(Microsoft.Web.WebView2.Core.CoreWebView2? coreWV2)
+    {
+        System.Diagnostics.Debug.WriteLine("[GoogleAiWebView] Scraping projects page");
+
+        const string js = """
+            (function() {
+                try {
+                    const rows = document.querySelectorAll('table tbody tr');
+                    const projects = [];
+                    rows.forEach(row => {
+                        const cells = row.querySelectorAll('td, th');
+                        if (cells.length === 0) return;
+                        const firstCell = cells[0];
+                        const nameBtn = firstCell.querySelector('button');
+                        if (!nameBtn) return;
+                        const name = nameBtn.textContent.trim();
+                        // Project ID is in the next sibling element after the button
+                        const idEl = nameBtn.nextElementSibling;
+                        const id = idEl ? idEl.textContent.trim() : '';
+                        if (id) projects.push({ name: name, id: id });
+                    });
+                    window._googleAiProjectsResult = JSON.stringify({ ok: true, projects: projects });
+                } catch (ex) {
+                    window._googleAiProjectsResult = JSON.stringify({ error: ex.message });
+                }
+            })();
+            'started';
+            """;
+
+        var raw = await ExecuteJsAndRetrieveAsync(coreWV2, js, "window._googleAiProjectsResult || 'null'");
+
+        if (string.IsNullOrEmpty(raw) || raw == "null")
+        {
+            System.Diagnostics.Debug.WriteLine("[GoogleAiWebView] No projects data returned");
+            if (_silent) { _tcs?.TrySetResult(null); return; }
+            _statusLabel.Text = "Not signed in \u2014 log in above then tap Retry.";
+            if (_retryBtn != null) _retryBtn.IsVisible = true;
+            return;
+        }
+
+        // Parse discovered projects
+        try
+        {
+            using var doc = JsonDocument.Parse(raw);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("ok", out _) && root.TryGetProperty("projects", out var arr))
+            {
+                foreach (var p in arr.EnumerateArray())
+                {
+                    var id = p.TryGetProperty("id", out var idProp) ? idProp.GetString() ?? "" : "";
+                    var name = p.TryGetProperty("name", out var nameProp) ? nameProp.GetString() ?? "" : "";
+                    if (!string.IsNullOrEmpty(id))
+                        _discoveredProjects.Add(new GoogleAiProject { Id = id, Name = name });
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[GoogleAiWebView] Projects parse EXCEPTION: {ex.Message}");
+        }
+
+        System.Diagnostics.Debug.WriteLine($"[GoogleAiWebView] Discovered {_discoveredProjects.Count} projects");
+
+        if (_discoveredProjects.Count == 0)
+        {
+            _tcs?.TrySetResult(null);
+            return;
+        }
+
+        // Populate project IDs and begin usage scraping
+        _projectIds = _discoveredProjects.Select(p => p.Id).ToList();
+        _currentProjectIndex = 0;
+        _phase = ScrapePhase.UsagePage;
+        NavigateToUsagePage(_projectIds[0]);
     }
 
     private async Task ScrapeUsagePageAsync(Microsoft.Web.WebView2.Core.CoreWebView2? coreWV2)

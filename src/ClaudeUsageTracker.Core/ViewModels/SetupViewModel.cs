@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using ClaudeUsageTracker.Core.Models;
 using ClaudeUsageTracker.Core.Services;
 
 namespace ClaudeUsageTracker.Core.ViewModels;
@@ -20,8 +21,7 @@ public partial class SetupViewModel(
 
     // Google AI Studio section
     [ObservableProperty] private bool _isGoogleAiConnected;
-    [ObservableProperty] private string _googleAiProjectId = "";
-    [ObservableProperty] private ObservableCollection<string> _googleAiProjects = [];
+    [ObservableProperty] private ObservableCollection<GoogleAiProject> _googleAiProjects = [];
 
     public event Action? NavigateToDashboard;
 
@@ -37,11 +37,10 @@ public partial class SetupViewModel(
         IsMiniMaxiConnected = !string.IsNullOrEmpty(miniKey);
         MiniMaxiApiKey = IsMiniMaxiConnected ? "••••••••••" : "";
 
-        var googleProjects = await storage.GetAsync("google_ai_projects");
+        var stored = await storage.GetAsync("google_ai_projects");
         GoogleAiProjects.Clear();
-        if (!string.IsNullOrEmpty(googleProjects))
-            foreach (var id in googleProjects.Split(',', StringSplitOptions.RemoveEmptyEntries))
-                GoogleAiProjects.Add(id);
+        foreach (var p in GoogleAiProject.FromJson(stored))
+            GoogleAiProjects.Add(p);
         IsGoogleAiConnected = GoogleAiProjects.Count > 0;
     }
 
@@ -73,39 +72,13 @@ public partial class SetupViewModel(
     }
 
     [RelayCommand]
-    public async Task AddGoogleAiProjectAsync()
-    {
-        var id = GoogleAiProjectId.Trim();
-        if (string.IsNullOrEmpty(id) || GoogleAiProjects.Contains(id)) return;
-        GoogleAiProjects.Add(id);
-        GoogleAiProjectId = "";
-        await SaveGoogleAiProjectsAsync();
-        IsGoogleAiConnected = true;
-    }
-
-    [RelayCommand]
-    public async Task RemoveGoogleAiProjectAsync(string projectId)
-    {
-        GoogleAiProjects.Remove(projectId);
-        await SaveGoogleAiProjectsAsync();
-        IsGoogleAiConnected = GoogleAiProjects.Count > 0;
-        if (!IsGoogleAiConnected)
-            await usageData.DeleteGoogleAiRecordsAsync(projectId);
-    }
-
-    [RelayCommand]
     public async Task DisconnectGoogleAiAsync()
     {
-        foreach (var id in GoogleAiProjects.ToList())
-            await usageData.DeleteGoogleAiRecordsAsync(id);
+        foreach (var p in GoogleAiProjects.ToList())
+            await usageData.DeleteGoogleAiRecordsAsync(p.Id);
         GoogleAiProjects.Clear();
         await storage.RemoveAsync("google_ai_projects");
         IsGoogleAiConnected = false;
-    }
-
-    private async Task SaveGoogleAiProjectsAsync()
-    {
-        await storage.SetAsync("google_ai_projects", string.Join(",", GoogleAiProjects));
     }
 
     [RelayCommand]
