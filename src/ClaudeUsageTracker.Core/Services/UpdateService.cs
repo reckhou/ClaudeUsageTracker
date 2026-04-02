@@ -82,6 +82,7 @@ public partial class UpdateService : ObservableObject, IUpdateService
         }
     }
 
+    [RelayCommand]
     public async Task<UpdateInfo?> CheckForUpdateAsync(CancellationToken ct = default)
     {
         try
@@ -174,20 +175,23 @@ public partial class UpdateService : ObservableObject, IUpdateService
                 HttpCompletionOption.ResponseHeadersRead, ct);
             response.EnsureSuccessStatusCode();
 
-            var   total  = response.Content.Headers.ContentLength ?? -1L;
-            var   buffer = new byte[81920];
-            long  read   = 0;
+            var  total  = response.Content.Headers.ContentLength ?? -1L;
+            var  buffer = new byte[81920];
+            long read   = 0;
 
-            await using var src  = await response.Content.ReadAsStreamAsync(ct);
-            await using var dest = File.Create(zipPath);
-            int bytesRead;
-            while ((bytesRead = await src.ReadAsync(buffer, ct)) > 0)
+            await using (var src  = await response.Content.ReadAsStreamAsync(ct))
+            await using (var dest = File.Create(zipPath))
             {
-                await dest.WriteAsync(buffer.AsMemory(0, bytesRead), ct);
-                read += bytesRead;
-                if (total > 0) UpdateProgress = (int)(read * 80 / total);
+                int bytesRead;
+                while ((bytesRead = await src.ReadAsync(buffer, ct)) > 0)
+                {
+                    await dest.WriteAsync(buffer.AsMemory(0, bytesRead), ct);
+                    read += bytesRead;
+                    if (total > 0) UpdateProgress = (int)(read * 80 / total);
+                }
+                await dest.FlushAsync(ct);
             }
-            await dest.FlushAsync(ct);
+            // dest is now disposed — FileShare.None lock released before SHA256 and extraction
 
             // --- Phase 2: Verify SHA256 ---
             if (!string.IsNullOrEmpty(_pendingUpdate.Sha256))
@@ -243,4 +247,30 @@ public partial class UpdateService : ObservableObject, IUpdateService
     }
 
     private bool CanApplyUpdate() => IsUpdateAvailable && !IsUpdating;
+
+    /// <summary>
+    /// Downloads and installs the latest release regardless of whether it is newer than the
+    /// running version. Intended for manual testing of the update pipeline.
+    /// </summary>
+    [RelayCommand]
+    public async Task ForceApplyUpdateAsync(CancellationToken ct = default)
+    {
+        var info = await CheckForUpdateAsync(ct);
+        if (info is null || string.IsNullOrEmpty(info.DownloadUrl)) return;
+
+        // Force IsUpdateAvailable = true by using 0.0.0 as the "current" version
+        _pendingUpdate = new UpdateInfo
+        {
+            CurrentVersion = new Version(0, 0, 0),
+            LatestVersion  = info.LatestVersion,
+            TagName        = info.TagName,
+            DownloadUrl    = info.DownloadUrl,
+            Sha256         = info.Sha256,
+            ReleaseNotes   = info.ReleaseNotes
+        };
+        LatestVersion     = info.TagName.TrimStart('v');
+        IsUpdateAvailable = true;
+
+        await ApplyUpdateAsync(ct);
+    }
 }

@@ -39,7 +39,8 @@ public static class MauiProgram
 		builder.Services.AddTransient<SetupViewModel>(sp =>
 			new SetupViewModel(
 				sp.GetRequiredService<ISecureStorageService>(),
-				sp.GetRequiredService<IUsageDataService>()));
+				sp.GetRequiredService<IUsageDataService>(),
+				sp.GetRequiredService<IUpdateService>()));
 		builder.Services.AddSingleton<ProvidersDashboardViewModel>(sp =>
 			new ProvidersDashboardViewModel(
 				sp.GetRequiredService<IUsageDataService>() as UsageDataService

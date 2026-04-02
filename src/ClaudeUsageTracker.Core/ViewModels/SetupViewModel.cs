@@ -8,8 +8,11 @@ namespace ClaudeUsageTracker.Core.ViewModels;
 
 public partial class SetupViewModel(
     ISecureStorageService storage,
-    IUsageDataService usageData) : ObservableObject
+    IUsageDataService usageData,
+    IUpdateService? updateService = null) : ObservableObject
 {
+    public IUpdateService? UpdateService { get; } = updateService;
+
     // Claude Pro section
     [ObservableProperty] private bool _isClaudeProConnected;
     [ObservableProperty] private string _claudeProStatus = "Not connected";

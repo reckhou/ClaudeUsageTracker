@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 
 namespace ClaudeUsageTracker.Core.Services;
 
@@ -14,6 +15,10 @@ public interface IUpdateService : INotifyPropertyChanged
     string UpdateButtonText       { get; }
     double UpdateProgressFraction { get; }
 
+    IAsyncRelayCommand CheckForUpdateCommand     { get; }
+    IAsyncRelayCommand ForceApplyUpdateCommand   { get; }
+
     Task<Models.UpdateInfo?> CheckForUpdateAsync(CancellationToken ct = default);
     Task ApplyUpdateAsync(CancellationToken ct = default);
+    Task ForceApplyUpdateAsync(CancellationToken ct = default);
 }

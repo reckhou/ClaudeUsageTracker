@@ -102,6 +102,42 @@
           </VerticalStackLayout>
         </Frame>
 
+        <!-- Updates Card -->
+        <Frame CornerRadius="10" Padding="20"
+               BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
+          <VerticalStackLayout Spacing="12">
+            <Label Text="Updates" FontSize="16" FontAttributes="Bold" />
+
+            <!-- Available version label -->
+            <Label Text="{Binding UpdateService.BannerTitle}" FontSize="12"
+                   IsVisible="{Binding UpdateService.IsUpdateAvailable}"
+                   TextColor="{StaticResource Primary}" />
+
+            <!-- Download progress bar -->
+            <ProgressBar IsVisible="{Binding UpdateService.IsUpdating}"
+                         Progress="{Binding UpdateService.UpdateProgressFraction}"
+                         ProgressColor="#4CAF50" HeightRequest="4" />
+
+            <!-- Check / Force buttons -->
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+              <Button Grid.Column="0" Text="Check for Update"
+                      Command="{Binding UpdateService.CheckForUpdateCommand}"
+                      IsEnabled="{Binding UpdateService.IsUpdating, Converter={StaticResource InvertedBoolConverter}}"
+                      BackgroundColor="Transparent"
+                      TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}"
+                      BorderColor="{AppThemeBinding Light={StaticResource Gray300}, Dark={StaticResource Gray600}}"
+                      BorderWidth="1" CornerRadius="6" FontSize="12" />
+              <Button Grid.Column="1" Text="Force Update"
+                      Command="{Binding UpdateService.ForceApplyUpdateCommand}"
+                      IsEnabled="{Binding UpdateService.IsUpdating, Converter={StaticResource InvertedBoolConverter}}"
+                      BackgroundColor="Transparent"
+                      TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}"
+                      BorderColor="{AppThemeBinding Light={StaticResource Gray300}, Dark={StaticResource Gray600}}"
+                      BorderWidth="1" CornerRadius="6" FontSize="12" />
+            </Grid>
+          </VerticalStackLayout>
+        </Frame>
+
         <Button Text="Go to Dashboard" Command="{Binding GoToDashboardCommand}"
                 HorizontalOptions="Fill" Margin="0,8,0,0" />
 
